@@ -32,152 +32,222 @@ os.environ["FLAGS_use_mkldnn"] = "0"
 from flask import Flask, request, jsonify, send_file, render_template_string
 from flask_cors import CORS
 
-# 网页界面 HTML
+# 网页界面 HTML - 白色简约主题
 WEB_UI_HTML = '''
 <!DOCTYPE html>
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OCR-SoM 测试</title>
+    <title>OCR-SoM</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh; padding: 20px;
+            background: #f5f5f5;
+            min-height: 100vh;
         }
-        .container { max-width: 1200px; margin: 0 auto; }
-        h1 { color: white; text-align: center; margin-bottom: 20px; font-size: 2em; }
-        .card { 
-            background: white; border-radius: 16px; padding: 24px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2); margin-bottom: 20px;
+        .header {
+            background: white;
+            border-bottom: 1px solid #e0e0e0;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
         }
-        .upload-area {
-            border: 3px dashed #ddd; border-radius: 12px; padding: 40px;
-            text-align: center; cursor: pointer; transition: all 0.3s;
+        .header h1 { font-size: 18px; font-weight: 600; color: #333; }
+        .header .status { font-size: 13px; color: #666; }
+        .main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+        
+        /* 上传区域 */
+        .upload-section { text-align: center; padding: 60px 20px; }
+        .upload-section.has-result { padding: 20px; }
+        .upload-btn {
+            background: #333;
+            color: white;
+            border: none;
+            padding: 14px 36px;
+            border-radius: 8px;
+            font-size: 15px;
+            cursor: pointer;
+            transition: background 0.2s;
         }
-        .upload-area:hover { border-color: #667eea; background: #f8f9ff; }
-        .upload-area.dragover { border-color: #667eea; background: #f0f2ff; }
-        .upload-icon { font-size: 48px; margin-bottom: 10px; }
-        .upload-text { color: #666; font-size: 16px; }
-        .upload-hint { color: #999; font-size: 13px; margin-top: 8px; }
+        .upload-btn:hover { background: #555; }
+        .upload-hint { color: #999; font-size: 13px; margin-top: 12px; }
         input[type="file"] { display: none; }
-        .btn {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white; border: none; padding: 12px 32px; border-radius: 8px;
-            font-size: 16px; cursor: pointer; transition: transform 0.2s;
+        
+        /* 结果区域 */
+        .result-section { display: none; }
+        .result-section.show { display: block; }
+        
+        /* 图片查看器 */
+        .viewer {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            overflow: hidden;
+            margin-bottom: 20px;
         }
-        .btn:hover { transform: scale(1.05); }
-        .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
-        .preview-container { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 20px; }
-        .preview-box { flex: 1; min-width: 300px; }
-        .preview-box h3 { margin-bottom: 12px; color: #333; font-size: 16px; }
-        .preview-img { 
-            width: 100%; border-radius: 8px; border: 1px solid #eee;
-            max-height: 500px; object-fit: contain; background: #f5f5f5;
+        .viewer-header {
+            padding: 12px 16px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
         }
-        .result-panel { margin-top: 20px; }
-        .result-panel h3 { margin-bottom: 12px; color: #333; }
-        .result-stats { 
-            display: flex; gap: 20px; margin-bottom: 16px; flex-wrap: wrap;
+        .viewer-title { font-size: 14px; font-weight: 500; color: #333; }
+        .viewer-stats { font-size: 13px; color: #666; }
+        .viewer-body {
+            padding: 16px;
+            background: #fafafa;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 300px;
         }
-        .stat-item {
-            background: #f8f9ff; padding: 12px 20px; border-radius: 8px;
+        .viewer-img {
+            max-width: 100%;
+            max-height: 70vh;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        /* 文字结果 */
+        .text-result {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+        .text-result-header {
+            padding: 12px 16px;
+            border-bottom: 1px solid #eee;
+            font-size: 14px;
+            font-weight: 500;
+            color: #333;
+        }
+        .text-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .text-item {
+            padding: 10px 16px;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 14px;
+        }
+        .text-item:last-child { border-bottom: none; }
+        .text-item:hover { background: #f9f9f9; }
+        .text-id {
+            background: #333;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+            min-width: 28px;
             text-align: center;
         }
-        .stat-value { font-size: 24px; font-weight: bold; color: #667eea; }
-        .stat-label { font-size: 12px; color: #666; margin-top: 4px; }
-        .elements-list {
-            max-height: 300px; overflow-y: auto; border: 1px solid #eee;
-            border-radius: 8px; font-family: monospace; font-size: 13px;
+        .text-content { flex: 1; color: #333; }
+        .text-coords { color: #999; font-size: 12px; font-family: monospace; }
+        
+        /* 加载状态 */
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
         }
-        .element-item {
-            padding: 8px 12px; border-bottom: 1px solid #f0f0f0;
-            display: flex; align-items: center; gap: 12px;
-        }
-        .element-item:last-child { border-bottom: none; }
-        .element-id {
-            background: #667eea; color: white; padding: 2px 8px;
-            border-radius: 4px; font-weight: bold; min-width: 30px; text-align: center;
-        }
-        .element-text { flex: 1; color: #333; }
-        .element-box { color: #999; font-size: 12px; }
-        .loading { text-align: center; padding: 40px; color: #666; }
         .spinner {
-            width: 40px; height: 40px; border: 4px solid #f0f0f0;
-            border-top-color: #667eea; border-radius: 50%;
-            animation: spin 1s linear infinite; margin: 0 auto 16px;
+            width: 32px;
+            height: 32px;
+            border: 3px solid #eee;
+            border-top-color: #333;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 16px;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .hidden { display: none; }
-        .error { color: #e74c3c; text-align: center; padding: 20px; }
+        
+        .error {
+            text-align: center;
+            padding: 20px;
+            color: #e53935;
+            font-size: 14px;
+        }
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🔍 OCR-SoM 测试工具</h1>
+    <div class="header">
+        <h1>OCR-SoM</h1>
+        <span class="status" id="deviceStatus"></span>
+    </div>
+    
+    <div class="main">
+        <div class="upload-section" id="uploadSection">
+            <button class="upload-btn" id="uploadBtn">选择图片</button>
+            <p class="upload-hint">支持 PNG、JPG、GIF 格式，点击或拖拽上传</p>
+        </div>
+        <input type="file" id="fileInput" accept="image/*">
         
-        <div class="card">
-            <div class="upload-area" id="uploadArea">
-                <div class="upload-icon">📷</div>
-                <div class="upload-text">点击或拖拽上传截图</div>
-                <div class="upload-hint">支持 PNG、JPG、GIF 格式</div>
-            </div>
-            <input type="file" id="fileInput" accept="image/*">
-            
-            <div class="preview-container hidden" id="previewContainer">
-                <div class="preview-box">
-                    <h3>原图</h3>
-                    <img id="originalImg" class="preview-img">
+        <div class="loading hidden" id="loading">
+            <div class="spinner"></div>
+            <div>识别中...</div>
+        </div>
+        
+        <div class="error hidden" id="error"></div>
+        
+        <div class="result-section" id="resultSection">
+            <div class="viewer">
+                <div class="viewer-header">
+                    <span class="viewer-title">标注结果</span>
+                    <span class="viewer-stats" id="stats"></span>
                 </div>
-                <div class="preview-box">
-                    <h3>标注结果</h3>
-                    <img id="markedImg" class="preview-img">
+                <div class="viewer-body">
+                    <img id="resultImg" class="viewer-img">
                 </div>
             </div>
             
-            <div class="loading hidden" id="loading">
-                <div class="spinner"></div>
-                <div>正在识别中...</div>
-            </div>
-            
-            <div class="error hidden" id="error"></div>
-            
-            <div class="result-panel hidden" id="resultPanel">
-                <h3>识别结果</h3>
-                <div class="result-stats" id="resultStats"></div>
-                <div class="elements-list" id="elementsList"></div>
+            <div class="text-result">
+                <div class="text-result-header">识别文字</div>
+                <div class="text-list" id="textList"></div>
             </div>
         </div>
     </div>
     
     <script>
-        const uploadArea = document.getElementById('uploadArea');
+        const uploadSection = document.getElementById('uploadSection');
+        const uploadBtn = document.getElementById('uploadBtn');
         const fileInput = document.getElementById('fileInput');
-        const previewContainer = document.getElementById('previewContainer');
-        const originalImg = document.getElementById('originalImg');
-        const markedImg = document.getElementById('markedImg');
         const loading = document.getElementById('loading');
         const errorDiv = document.getElementById('error');
-        const resultPanel = document.getElementById('resultPanel');
-        const resultStats = document.getElementById('resultStats');
-        const elementsList = document.getElementById('elementsList');
+        const resultSection = document.getElementById('resultSection');
+        const resultImg = document.getElementById('resultImg');
+        const stats = document.getElementById('stats');
+        const textList = document.getElementById('textList');
+        const deviceStatus = document.getElementById('deviceStatus');
+        
+        // 获取设备信息
+        fetch('/info').then(r => r.json()).then(data => {
+            deviceStatus.textContent = data.device;
+        });
         
         // 点击上传
-        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadBtn.addEventListener('click', () => fileInput.click());
         
         // 拖拽上传
-        uploadArea.addEventListener('dragover', (e) => {
+        document.body.addEventListener('dragover', (e) => {
             e.preventDefault();
-            uploadArea.classList.add('dragover');
+            uploadSection.style.background = '#f0f0f0';
         });
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('dragover');
+        document.body.addEventListener('dragleave', () => {
+            uploadSection.style.background = '';
         });
-        uploadArea.addEventListener('drop', (e) => {
+        document.body.addEventListener('drop', (e) => {
             e.preventDefault();
-            uploadArea.classList.remove('dragover');
+            uploadSection.style.background = '';
             if (e.dataTransfer.files.length) {
                 handleFile(e.dataTransfer.files[0]);
             }
@@ -196,38 +266,21 @@ WEB_UI_HTML = '''
                 return;
             }
             
-            // 显示原图预览
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                originalImg.src = e.target.result;
-                previewContainer.classList.remove('hidden');
-                markedImg.src = '';
-            };
-            reader.readAsDataURL(file);
-            
-            // 调用 API
+            // 显示加载
             loading.classList.remove('hidden');
             errorDiv.classList.add('hidden');
-            resultPanel.classList.add('hidden');
+            resultSection.classList.remove('show');
+            uploadSection.classList.add('has-result');
             
             try {
-                const formData = new FormData();
-                formData.append('file', file);
-                
-                const response = await fetch('/som', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                // 重新发送带 JSON 的请求以获取 return_image
                 const base64 = await fileToBase64(file);
-                const jsonResponse = await fetch('/som', {
+                const response = await fetch('/som', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ image: base64, return_image: true })
                 });
                 
-                const data = await jsonResponse.json();
+                const data = await response.json();
                 
                 if (data.success) {
                     showResult(data);
@@ -253,38 +306,24 @@ WEB_UI_HTML = '''
         function showResult(data) {
             // 显示标注图
             if (data.marked_image) {
-                markedImg.src = 'data:image/png;base64,' + data.marked_image;
+                resultImg.src = 'data:image/png;base64,' + data.marked_image;
             }
             
             // 统计
             const textCount = data.elements.filter(e => e.type === 'text').length;
-            const contourCount = data.elements.filter(e => e.type === 'contour').length;
+            stats.textContent = `共 ${data.count} 个元素，${textCount} 个文字`;
             
-            resultStats.innerHTML = `
-                <div class="stat-item">
-                    <div class="stat-value">${data.count}</div>
-                    <div class="stat-label">总元素数</div>
+            // 文字列表
+            const textElements = data.elements.filter(e => e.type === 'text');
+            textList.innerHTML = textElements.map(el => `
+                <div class="text-item">
+                    <span class="text-id">${el.id}</span>
+                    <span class="text-content">${el.text}</span>
+                    <span class="text-coords">[${el.box.join(', ')}]</span>
                 </div>
-                <div class="stat-item">
-                    <div class="stat-value">${textCount}</div>
-                    <div class="stat-label">文字元素</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value">${contourCount}</div>
-                    <div class="stat-label">UI 轮廓</div>
-                </div>
-            `;
+            `).join('') || '<div class="text-item"><span class="text-content" style="color:#999">未识别到文字</span></div>';
             
-            // 元素列表
-            elementsList.innerHTML = data.elements.map(el => `
-                <div class="element-item">
-                    <span class="element-id">${el.id}</span>
-                    <span class="element-text">${el.text || '[UI 元素]'}</span>
-                    <span class="element-box">[${el.box.join(', ')}]</span>
-                </div>
-            `).join('');
-            
-            resultPanel.classList.remove('hidden');
+            resultSection.classList.add('show');
         }
         
         function showError(msg) {
@@ -304,14 +343,14 @@ def get_ocr():
     global _ocr_instance
     if _ocr_instance is None:
         from paddleocr import PaddleOCR
-        print("Loading PaddleOCR model...")
+        print("正在加载 PaddleOCR 模型...")
         _ocr_instance = PaddleOCR(
             use_angle_cls=True,
             use_gpu=is_gpu_available(),
             lang='ch',
             show_log=False,
         )
-        print("PaddleOCR loaded!")
+        print("PaddleOCR 加载完成!")
     return _ocr_instance
 
 def is_gpu_available():
@@ -344,37 +383,20 @@ def info():
         "version": "1.0.0",
         "device": "GPU" if gpu_available else "CPU",
         "endpoints": {
-            "POST /ocr": "OCR text recognition",
-            "POST /som": "Generate SoM marked image",
-            "GET /health": "Health check",
-            "GET /info": "Service info",
+            "POST /ocr": "OCR 文字识别",
+            "POST /som": "生成 SoM 标注图",
+            "GET /health": "健康检查",
+            "GET /info": "服务信息",
         }
     })
 
 @app.route('/ocr', methods=['POST'])
 def ocr():
-    """
-    OCR 文字识别
-    
-    Request:
-      - image: base64 encoded image, or
-      - image_path: local file path, or
-      - multipart form with 'file' field
-    
-    Response:
-      {
-        "success": true,
-        "count": 10,
-        "elements": [
-          {"id": 0, "text": "...", "confidence": 0.99, "box": [x1,y1,x2,y2]},
-          ...
-        ]
-      }
-    """
+    """OCR 文字识别"""
     try:
         image_path = get_image_from_request(request)
         if not image_path:
-            return jsonify({"success": False, "error": "No image provided"}), 400
+            return jsonify({"success": False, "error": "未提供图片"}), 400
         
         ocr_instance = get_ocr()
         result = ocr_instance.ocr(str(image_path), cls=True)
@@ -400,7 +422,6 @@ def ocr():
                     "polygon": [[int(p[0]), int(p[1])] for p in box],
                 })
         
-        # 清理临时文件
         cleanup_temp_file(image_path)
         
         return jsonify({
@@ -414,33 +435,20 @@ def ocr():
 
 @app.route('/som', methods=['POST'])
 def som():
-    """
-    生成 SoM 标注图
-    
-    Request:
-      - image: base64 encoded image, or
-      - image_path: local file path, or
-      - multipart form with 'file' field
-      - detect_contours: bool (default true)
-      - return_image: bool (default true, return base64 image)
-    
-    Response:
-      {
-        "success": true,
-        "count": 10,
-        "elements": [...],
-        "marked_image": "base64..."  (if return_image=true)
-      }
-    """
+    """生成 SoM 标注图"""
     try:
         image_path = get_image_from_request(request)
         if not image_path:
-            return jsonify({"success": False, "error": "No image provided"}), 400
+            return jsonify({"success": False, "error": "未提供图片"}), 400
         
-        # 获取选项
-        data = request.json or {}
-        detect_contours = data.get('detect_contours', True)
-        return_image = data.get('return_image', True)
+        # 获取选项（兼容 multipart form 和 json）
+        detect_contours = True
+        return_image = True
+        
+        if request.is_json:
+            data = request.json or {}
+            detect_contours = data.get('detect_contours', True)
+            return_image = data.get('return_image', True)
         
         # 运行 OCR
         ocr_instance = get_ocr()
@@ -469,7 +477,6 @@ def som():
         # 检测 UI 轮廓
         if detect_contours:
             ui_elements = detect_ui_contours(image_path)
-            # 合并并重新编号
             start_id = len(elements)
             for i, el in enumerate(ui_elements):
                 el["id"] = start_id + i
@@ -491,7 +498,6 @@ def som():
             
             os.unlink(marked_image_path)
         
-        # 清理临时文件
         cleanup_temp_file(image_path)
         
         return jsonify(response)
@@ -511,21 +517,22 @@ def get_image_from_request(req):
         return temp_path
     
     # 2. JSON body
-    data = req.json or {}
-    
-    # 2.1 base64 image
-    if 'image' in data:
-        image_data = base64.b64decode(data['image'])
-        temp_path = tempfile.mktemp(suffix=".png")
-        with open(temp_path, 'wb') as f:
-            f.write(image_data)
-        return temp_path
-    
-    # 2.2 local file path
-    if 'image_path' in data:
-        path = data['image_path']
-        if os.path.exists(path):
-            return path
+    if req.is_json:
+        data = req.json or {}
+        
+        # 2.1 base64 image
+        if 'image' in data:
+            image_data = base64.b64decode(data['image'])
+            temp_path = tempfile.mktemp(suffix=".png")
+            with open(temp_path, 'wb') as f:
+                f.write(image_data)
+            return temp_path
+        
+        # 2.2 local file path
+        if 'image_path' in data:
+            path = data['image_path']
+            if os.path.exists(path):
+                return path
     
     return None
 
@@ -609,30 +616,30 @@ def draw_som_marks(image_path, elements, output_path):
 
 def main():
     parser = argparse.ArgumentParser(description="OCR-SoM API Server")
-    parser.add_argument("--host", default="127.0.0.1", help="Host to bind (default: 127.0.0.1)")
-    parser.add_argument("--port", type=int, default=5000, help="Port to bind (default: 5000)")
-    parser.add_argument("--debug", action="store_true", help="Enable debug mode")
+    parser.add_argument("--host", default="127.0.0.1", help="绑定地址 (默认: 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=5000, help="端口 (默认: 5000)")
+    parser.add_argument("--debug", action="store_true", help="调试模式")
     args = parser.parse_args()
     
     print("=" * 60)
-    print("  OCR-SoM API Server")
+    print("  OCR-SoM API 服务")
     print("=" * 60)
-    print(f"\n  Device: {'GPU' if is_gpu_available() else 'CPU'}")
-    print(f"  Server: http://{args.host}:{args.port}")
-    print(f"\n  Web UI: http://{args.host}:{args.port}/")
-    print("\n  API Endpoints:")
-    print("    POST /ocr  - OCR text recognition")
-    print("    POST /som  - Generate SoM marked image")
-    print("    GET /health - Health check")
-    print("    GET /info   - Service info")
+    print(f"\n  设备: {'GPU' if is_gpu_available() else 'CPU'}")
+    print(f"  地址: http://{args.host}:{args.port}")
+    print(f"\n  网页界面: http://{args.host}:{args.port}/")
+    print("\n  API 接口:")
+    print("    POST /ocr  - OCR 文字识别")
+    print("    POST /som  - 生成 SoM 标注图")
+    print("    GET /health - 健康检查")
+    print("    GET /info   - 服务信息")
     print("\n" + "=" * 60)
     
     # 预加载模型
-    print("\nPreloading model (first time may take a while)...")
+    print("\n正在预加载模型（首次加载可能较慢）...")
     get_ocr()
     
-    print(f"\nServer is running at http://{args.host}:{args.port}")
-    print("Press Ctrl+C to stop.\n")
+    print(f"\n服务已启动: http://{args.host}:{args.port}")
+    print("按 Ctrl+C 停止服务\n")
     
     app.run(host=args.host, port=args.port, debug=args.debug)
 
