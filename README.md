@@ -21,15 +21,10 @@ AI: 点击坐标 (523, 341)  ← 经常偏移 50-100 像素！
 1. 用 OCR 识别屏幕上所有文字，标上编号 [0] [1] [2] ...
 2. 把标注图发给 AI
 3. AI 只需说: "点击 42 号"
-4. 从本地 JSON 获取 42 号的精确坐标 → 准确点击
+4. 从本地获取 42 号的精确坐标 → 准确点击
 ```
 
-**核心思想**：
-- ❌ AI 不擅长：估计像素坐标
-- ✅ AI 擅长：理解语义、选择目标
-- ✅ OCR 擅长：提供精确坐标
-
-把任务拆分给各自擅长的模块！
+**核心思想**：AI 只负责"选择"，坐标由 OCR 保证精确。
 
 ## 效果展示
 
@@ -37,227 +32,299 @@ AI: 点击坐标 (523, 341)  ← 经常偏移 50-100 像素！
 
 ## 特点
 
-- ✅ **像素级精确** - OCR 识别的文字坐标绝对精确
+- ✅ **像素级精确** - OCR 坐标绝对精确
+- ✅ **GPU 自动检测** - 有 NVIDIA 显卡自动启用 GPU 加速
+- ✅ **跨平台支持** - Windows / Linux / macOS
+- ✅ **HTTP API** - 提供本地 API 服务，方便调用
 - ✅ **中英文支持** - PaddleOCR 对中文识别效果极佳
-- ✅ **CPU 运行** - 无需 GPU，普通电脑即可运行
-- ✅ **一键安装** - Windows 用户双击 `install.bat` 即可
-- ✅ **Node.js 封装** - 可直接在 Node.js 项目中调用
 
 ## 快速开始
 
-### Windows 一键安装
+### 一键安装
 
+**Windows:**
 ```bash
-# 双击运行
-install.bat
+python install.py
 ```
 
-### 手动安装
+**Linux / macOS:**
+```bash
+chmod +x install.sh
+./install.sh
+```
+
+安装脚本会自动：
+1. 检测操作系统
+2. 检测 NVIDIA GPU 和 CUDA 版本
+3. 安装对应版本的 PaddlePaddle（CPU/GPU）
+4. 安装其他依赖
+
+### 安装选项
 
 ```bash
-# 1. 确保已安装 Python 3.9+
-python --version
-
-# 2. 安装依赖
-pip install paddlepaddle==2.6.2 paddleocr==2.7.3 "numpy<2" opencv-python-headless Pillow -i https://pypi.tuna.tsinghua.edu.cn/simple
+python install.py          # 自动检测
+python install.py --cpu    # 强制 CPU 版本
+python install.py --gpu    # 强制 GPU 版本（需要 CUDA）
 ```
 
 ## 使用方法
 
-### 命令行
+### 方式 1: 命令行
 
 ```bash
-python ocr_som.py <输入图片> [输出标注图] [输出JSON]
-
-# 示例
 python ocr_som.py screenshot.png marked.png elements.json
 ```
 
-### Node.js
+### 方式 2: HTTP API（推荐）
+
+启动服务：
+
+```bash
+python server.py                  # 默认端口 5000
+python server.py --port 8080      # 自定义端口
+python server.py --host 0.0.0.0   # 允许外部访问
+```
+
+调用 API：
+
+```bash
+# OCR 识别
+curl -X POST http://localhost:5000/ocr \
+  -H "Content-Type: application/json" \
+  -d '{"image_path": "/path/to/screenshot.png"}'
+
+# 生成 SoM 标注图
+curl -X POST http://localhost:5000/som \
+  -H "Content-Type: application/json" \
+  -d '{"image_path": "/path/to/screenshot.png"}'
+```
+
+### 方式 3: Node.js
 
 ```javascript
-import { runOcrSom, checkInstall, installDeps } from 'ocr-som';
+import { runOcrSom } from 'ocr-som';
 
-// 检查安装
-const { installed } = await checkInstall();
-if (!installed) {
-  await installDeps();
-}
-
-// 运行 OCR + SoM
 const result = await runOcrSom('screenshot.png');
-
-console.log(`识别到 ${result.count} 个元素`);
-
-// 获取某个元素的坐标
-const element = result.elements.find(e => e.text === '确定');
-if (element) {
-  const [x1, y1, x2, y2] = element.box;
-  const centerX = (x1 + x2) / 2;
-  const centerY = (y1 + y2) / 2;
-  console.log(`点击坐标: (${centerX}, ${centerY})`);
-}
+console.log(result.elements);
 ```
 
-### 与 AI 配合使用
+## HTTP API 文档
 
-```javascript
-import { runOcrSom, getElementById, getElementCenter } from 'ocr-som';
+### `GET /health`
 
-// 1. 截图并运行 OCR-SoM
-const result = await runOcrSom('screenshot.png', {
-  outputImage: 'marked.png'
-});
+健康检查。
 
-// 2. 把 marked.png 发给 AI，让它选择要点击的编号
-const aiResponse = await askAI(`
-  这是屏幕截图，每个元素都标了编号。
-  请告诉我应该点击哪个编号来 [完成某任务]。
-  只需返回: {"target_id": 编号}
-`, 'marked.png');
-
-// 3. 获取精确坐标
-const targetId = JSON.parse(aiResponse).target_id;
-const element = getElementById(result.elements, targetId);
-const { x, y } = getElementCenter(element);
-
-// 4. 执行点击
-await click(x, y);  // 像素级精确！
+```json
+{"status": "ok"}
 ```
 
-## 输出格式
+### `GET /info`
 
-### 标注图
-
-每个识别到的元素都会被框出并标注编号。
-
-### JSON 数据
+服务信息。
 
 ```json
 {
-  "image": "screenshot.png",
-  "count": 130,
+  "name": "OCR-SoM",
+  "version": "1.0.0",
+  "device": "GPU"
+}
+```
+
+### `POST /ocr`
+
+OCR 文字识别。
+
+**Request:**
+
+```json
+{
+  "image": "base64...",      // base64 图片
+  // 或
+  "image_path": "/path/to/image.png"  // 本地路径
+}
+```
+
+或使用 multipart form:
+```bash
+curl -X POST http://localhost:5000/ocr -F "file=@screenshot.png"
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "count": 42,
   "elements": [
     {
       "id": 0,
       "type": "text",
       "text": "确定",
       "confidence": 0.99,
-      "box": [100, 200, 150, 230]
-    },
-    {
-      "id": 1,
-      "type": "contour",
-      "box": [300, 400, 380, 450]
+      "box": [100, 200, 150, 230],
+      "polygon": [[100,200], [150,200], [150,230], [100,230]]
     }
   ]
 }
 ```
 
-**字段说明**：
-- `id`: 元素编号（与图上标注对应）
-- `type`: 类型，`text`（文字）或 `contour`（轮廓）
-- `text`: 识别的文字内容（仅 text 类型）
-- `confidence`: 置信度 0-1（仅 text 类型）
-- `box`: 边界框 `[x1, y1, x2, y2]`（左上角和右下角坐标）
+### `POST /som`
 
-## API 参考
+生成 SoM 标注图。
 
-### `checkInstall()`
+**Request:**
 
-检查 PaddleOCR 是否已安装。
-
-```javascript
-const { installed, python, error } = await checkInstall();
-```
-
-### `installDeps(options?)`
-
-安装 PaddleOCR 依赖。
-
-```javascript
-await installDeps({
-  onProgress: (msg) => console.log(msg)
-});
-```
-
-### `runOcrSom(inputImage, options?)`
-
-运行 OCR + SoM 标注。
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| inputImage | string | 输入图片路径 |
-| options.outputImage | string | 输出标注图路径（可选） |
-| options.detectContours | boolean | 是否检测 UI 轮廓（默认 true） |
-
-返回值：
-```javascript
+```json
 {
-  elements: [...],     // 元素列表
-  outputImage: '...',  // 标注图路径
-  count: 130           // 元素数量
+  "image": "base64...",
+  "detect_contours": true,    // 是否检测 UI 轮廓
+  "return_image": true        // 是否返回标注图
 }
 ```
 
-### `getElementById(elements, id)`
+**Response:**
 
-根据编号获取元素。
-
-### `getElementCenter(element)`
-
-获取元素中心点坐标。
-
-```javascript
-const { x, y } = getElementCenter(element);
+```json
+{
+  "success": true,
+  "count": 50,
+  "elements": [...],
+  "marked_image": "base64..."  // 标注图（base64）
+}
 ```
 
-### `findElementByText(elements, text, fuzzy?)`
+## 与 AI 配合使用
 
-根据文字查找元素。
+```python
+import requests
+import base64
+
+# 1. 截图并调用 SoM API
+with open('screenshot.png', 'rb') as f:
+    image_b64 = base64.b64encode(f.read()).decode()
+
+resp = requests.post('http://localhost:5000/som', json={
+    'image': image_b64,
+    'return_image': True
+})
+result = resp.json()
+
+# 2. 保存标注图
+marked_image = base64.b64decode(result['marked_image'])
+with open('marked.png', 'wb') as f:
+    f.write(marked_image)
+
+# 3. 把 marked.png 发给 AI，让它选择编号
+ai_response = call_your_ai("""
+这是屏幕截图，每个元素都标了编号。
+请告诉我应该点击哪个编号来 [完成某任务]。
+只需返回: {"target_id": 编号}
+""", image='marked.png')
+
+# 4. 获取精确坐标
+target_id = json.loads(ai_response)['target_id']
+element = next(e for e in result['elements'] if e['id'] == target_id)
+x = (element['box'][0] + element['box'][2]) // 2
+y = (element['box'][1] + element['box'][3]) // 2
+
+# 5. 执行点击
+pyautogui.click(x, y)  # 像素级精确！
+```
+
+## 各语言调用示例
+
+### Python
+
+```python
+import requests
+
+resp = requests.post('http://localhost:5000/ocr', json={
+    'image_path': '/path/to/image.png'
+})
+elements = resp.json()['elements']
+```
+
+### JavaScript / Node.js
 
 ```javascript
-// 精确匹配
-const btns = findElementByText(elements, '确定');
+const resp = await fetch('http://localhost:5000/ocr', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ image_path: '/path/to/image.png' })
+});
+const { elements } = await resp.json();
+```
 
-// 模糊匹配
-const items = findElementByText(elements, '设置', true);
+### Go
+
+```go
+resp, _ := http.Post("http://localhost:5000/ocr", "application/json",
+    strings.NewReader(`{"image_path": "/path/to/image.png"}`))
+```
+
+### Rust
+
+```rust
+let client = reqwest::Client::new();
+let resp = client.post("http://localhost:5000/ocr")
+    .json(&json!({"image_path": "/path/to/image.png"}))
+    .send().await?;
 ```
 
 ## 性能
 
-| 指标 | 数值 |
-|------|------|
-| 首次加载 | ~5s（加载模型） |
-| 后续识别 | ~10s（1920x1080 图片） |
-| 内存占用 | ~500MB |
+| 配置 | 首次加载 | 识别速度 |
+|------|---------|---------|
+| CPU (i7) | ~5s | ~10s/张 |
+| GPU (RTX 3060) | ~3s | ~2s/张 |
 
 ## 系统要求
 
-- Windows 10/11（macOS/Linux 需手动安装）
 - Python 3.9 - 3.11
 - 4GB+ 内存
+- （可选）NVIDIA GPU + CUDA 11/12
 
 ## 常见问题
 
+### Q: GPU 版本安装失败？
+
+确保已安装 CUDA Toolkit：
+```bash
+# 检查 CUDA 版本
+nvcc --version
+nvidia-smi
+```
+
 ### Q: 首次运行很慢？
 
-A: 首次运行需要下载 OCR 模型（约 20MB），之后会缓存到 `~/.paddleocr/`。
+首次运行需要下载 OCR 模型（约 20MB），之后会缓存到 `~/.paddleocr/`。
 
-### Q: 如何识别图标/按钮？
+### Q: API 服务如何后台运行？
 
-A: 纯图标无法通过 OCR 识别。可以：
-1. 启用轮廓检测（默认开启）
-2. 配合 Windows UI Automation 获取更多元素
+```bash
+# Linux/macOS
+nohup python server.py > ocr-som.log 2>&1 &
 
-### Q: 支持 macOS/Linux 吗？
+# Windows (PowerShell)
+Start-Process python -ArgumentList "server.py" -WindowStyle Hidden
+```
 
-A: 支持，但需要手动安装 Python 和依赖，`install.bat` 仅适用于 Windows。
+### Q: 如何配置开机自启？
 
-## 相关项目
+Linux (systemd):
+```ini
+# /etc/systemd/system/ocr-som.service
+[Unit]
+Description=OCR-SoM API Server
+After=network.target
 
-- [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) - 百度开源 OCR 工具
-- [Set-of-Mark](https://github.com/microsoft/SoM) - 微软 SoM 论文实现
+[Service]
+ExecStart=/usr/bin/python3 /path/to/server.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
 
 ## License
 
