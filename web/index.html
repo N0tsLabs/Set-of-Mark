@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR-SoM</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { 
+            height: 100%; 
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #fff;
+        }
+        input[type="file"] { display: none; }
+        .hidden { display: none !important; }
+        
+        /* ===== 首页 ===== */
+        .home {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .home-title {
+            font-size: 48px;
+            font-weight: 300;
+            color: #222;
+            margin-bottom: 8px;
+            letter-spacing: -1px;
+        }
+        .home-subtitle {
+            font-size: 15px;
+            color: #999;
+            margin-bottom: 48px;
+        }
+        .home-btn {
+            background: #222;
+            color: #fff;
+            border: none;
+            padding: 16px 48px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .home-btn:hover { background: #444; transform: scale(1.02); }
+        .home-hint {
+            margin-top: 16px;
+            font-size: 13px;
+            color: #bbb;
+        }
+        .home-device {
+            position: absolute;
+            bottom: 24px;
+            font-size: 12px;
+            color: #ccc;
+        }
+        
+        /* ===== 加载页 ===== */
+        .loading-page {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .spinner {
+            width: 40px; height: 40px;
+            border: 3px solid #eee;
+            border-top-color: #222;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text { color: #666; font-size: 15px; }
+        
+        /* ===== 结果页 ===== */
+        .result-page {
+            height: 100%;
+            display: flex;
+        }
+        
+        /* 左侧面板 */
+        .left-panel {
+            width: 380px;
+            min-width: 380px;
+            height: 100%;
+            border-right: 1px solid #eee;
+            display: flex;
+            flex-direction: column;
+            background: #fafafa;
+        }
+        .panel-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid #eee;
+            background: #fff;
+        }
+        .panel-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        .panel-title { font-size: 15px; font-weight: 600; color: #333; }
+        .panel-stats { font-size: 12px; color: #999; }
+        .panel-btn {
+            background: #f5f5f5;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #666;
+            cursor: pointer;
+        }
+        .panel-btn:hover { background: #eee; }
+        
+        /* 搜索框 */
+        .search-box {
+            display: flex;
+            align-items: center;
+            background: #f5f5f5;
+            border-radius: 6px;
+            padding: 0 12px;
+        }
+        .search-icon { color: #999; font-size: 14px; margin-right: 8px; }
+        .search-input {
+            flex: 1;
+            border: none;
+            background: transparent;
+            padding: 10px 0;
+            font-size: 14px;
+            outline: none;
+        }
+        .search-input::placeholder { color: #bbb; }
+        .search-clear {
+            background: none;
+            border: none;
+            color: #999;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 4px;
+        }
+        .search-clear:hover { color: #666; }
+        
+        .element-list {
+            flex: 1;
+            overflow-y: auto;
+        }
+        .element-item {
+            padding: 12px 20px;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            transition: background 0.15s;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .element-item:hover { background: #f0f0f0; }
+        .element-item.active { background: #e8f4ff; }
+        .element-item.hidden-by-search { display: none; }
+        .element-id {
+            background: #222;
+            color: #fff;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            min-width: 28px;
+            text-align: center;
+        }
+        .element-item.active .element-id { background: #0066cc; }
+        .element-info { flex: 1; min-width: 0; }
+        .element-text {
+            font-size: 14px;
+            color: #333;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .element-meta {
+            font-size: 11px;
+            color: #999;
+            margin-top: 2px;
+            font-family: monospace;
+        }
+        
+        /* 搜索高亮 */
+        .highlight-text { background: #fff3cd; padding: 1px 2px; border-radius: 2px; }
+        
+        /* 无搜索结果 */
+        .no-results {
+            padding: 40px 20px;
+            text-align: center;
+            color: #999;
+            font-size: 14px;
+        }
+        
+        /* 右侧图片查看器 */
+        .right-panel {
+            flex: 1;
+            height: 100%;
+            background: #1a1a1a;
+            position: relative;
+            overflow: hidden;
+        }
+        .viewer-toolbar {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            display: flex;
+            gap: 8px;
+            z-index: 10;
+        }
+        .viewer-btn {
+            background: rgba(255,255,255,0.9);
+            border: none;
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            transition: all 0.2s;
+        }
+        .viewer-btn:hover { background: #fff; transform: scale(1.05); }
+        
+        .viewer-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: grab;
+            position: relative;
+        }
+        .viewer-container:active { cursor: grabbing; }
+        
+        .viewer-canvas {
+            position: relative;
+            transform-origin: center center;
+        }
+        .viewer-img {
+            display: block;
+            max-width: none;
+            border-radius: 4px;
+        }
+        
+        /* 聚焦遮罩 */
+        .focus-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 5;
+        }
+        .focus-overlay.active { opacity: 1; }
+        
+        /* 高亮框 */
+        .highlight-box {
+            position: absolute;
+            border: 3px solid #00ff88;
+            background: transparent;
+            border-radius: 4px;
+            pointer-events: none;
+            z-index: 10;
+            box-shadow: 0 0 20px rgba(0, 255, 136, 0.5), 0 0 40px rgba(0, 255, 136, 0.3);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .highlight-box.active { opacity: 1; }
+        
+        /* 缩放提示 */
+        .zoom-indicator {
+            position: absolute;
+            bottom: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.7);
+            color: #fff;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 首页 -->
+    <div class="home" id="homePage">
+        <h1 class="home-title">OCR-SoM</h1>
+        <p class="home-subtitle">基于 PaddleOCR 的视觉标注工具</p>
+        <button class="home-btn" id="uploadBtn">选择图片</button>
+        <p class="home-hint">支持拖拽上传 PNG、JPG、GIF</p>
+        <div class="home-device" id="deviceInfo"></div>
+    </div>
+    <input type="file" id="fileInput" accept="image/*">
+    
+    <!-- 加载页 -->
+    <div class="loading-page hidden" id="loadingPage">
+        <div class="spinner"></div>
+        <div class="loading-text">正在识别...</div>
+    </div>
+    
+    <!-- 结果页 -->
+    <div class="result-page hidden" id="resultPage">
+        <div class="left-panel">
+            <div class="panel-header">
+                <div class="panel-top">
+                    <div>
+                        <div class="panel-title">识别结果</div>
+                        <div class="panel-stats" id="stats"></div>
+                    </div>
+                    <button class="panel-btn" id="newUploadBtn">重新上传</button>
+                </div>
+                <div class="search-box">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" class="search-input" id="searchInput" placeholder="搜索文字...">
+                    <button class="search-clear hidden" id="searchClear">×</button>
+                </div>
+            </div>
+            <div class="element-list" id="elementList"></div>
+            <div class="no-results hidden" id="noResults">未找到匹配结果</div>
+        </div>
+        <div class="right-panel">
+            <div class="viewer-toolbar">
+                <button class="viewer-btn" id="zoomInBtn" title="放大">+</button>
+                <button class="viewer-btn" id="zoomOutBtn" title="缩小">−</button>
+                <button class="viewer-btn" id="resetBtn" title="重置">↺</button>
+            </div>
+            <div class="viewer-container" id="viewerContainer">
+                <div class="focus-overlay" id="focusOverlay"></div>
+                <div class="viewer-canvas" id="viewerCanvas">
+                    <img class="viewer-img" id="resultImg">
+                    <div class="highlight-box" id="highlightBox"></div>
+                </div>
+            </div>
+            <div class="zoom-indicator" id="zoomIndicator">100%</div>
+        </div>
+    </div>
+    
+    <script>
+        // 元素引用
+        const homePage = document.getElementById('homePage');
+        const loadingPage = document.getElementById('loadingPage');
+        const resultPage = document.getElementById('resultPage');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const newUploadBtn = document.getElementById('newUploadBtn');
+        const fileInput = document.getElementById('fileInput');
+        const deviceInfo = document.getElementById('deviceInfo');
+        const stats = document.getElementById('stats');
+        const elementList = document.getElementById('elementList');
+        const resultImg = document.getElementById('resultImg');
+        const viewerContainer = document.getElementById('viewerContainer');
+        const viewerCanvas = document.getElementById('viewerCanvas');
+        const highlightBox = document.getElementById('highlightBox');
+        const focusOverlay = document.getElementById('focusOverlay');
+        const zoomIndicator = document.getElementById('zoomIndicator');
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const searchInput = document.getElementById('searchInput');
+        const searchClear = document.getElementById('searchClear');
+        const noResults = document.getElementById('noResults');
+        
+        // 状态
+        let currentElements = [];
+        let scale = 1;
+        let translateX = 0;
+        let translateY = 0;
+        let isDragging = false;
+        let startX, startY;
+        let imgNaturalWidth = 0;
+        let imgNaturalHeight = 0;
+        let focusTimeout = null;
+        
+        // 获取设备信息
+        fetch('/info').then(r => r.json()).then(data => {
+            deviceInfo.textContent = `运行于 ${data.device}`;
+        });
+        
+        // 上传按钮
+        uploadBtn.addEventListener('click', () => fileInput.click());
+        newUploadBtn.addEventListener('click', () => fileInput.click());
+        
+        // 拖拽上传
+        document.body.addEventListener('dragover', e => {
+            e.preventDefault();
+            if (!resultPage.classList.contains('hidden')) return;
+            homePage.style.background = '#f8f8f8';
+        });
+        document.body.addEventListener('dragleave', () => {
+            homePage.style.background = '';
+        });
+        document.body.addEventListener('drop', e => {
+            e.preventDefault();
+            homePage.style.background = '';
+            if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+        });
+        
+        // 文件选择
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length) handleFile(fileInput.files[0]);
+        });
+        
+        // 搜索功能
+        searchInput.addEventListener('input', () => {
+            const query = searchInput.value.trim().toLowerCase();
+            searchClear.classList.toggle('hidden', !query);
+            
+            let visibleCount = 0;
+            elementList.querySelectorAll('.element-item').forEach(item => {
+                const text = item.querySelector('.element-text').textContent.toLowerCase();
+                const match = !query || text.includes(query);
+                item.classList.toggle('hidden-by-search', !match);
+                if (match) visibleCount++;
+                
+                // 高亮匹配文字
+                const textEl = item.querySelector('.element-text');
+                const originalText = item.dataset.originalText || textEl.textContent;
+                item.dataset.originalText = originalText;
+                
+                if (query && match) {
+                    const regex = new RegExp(`(${query})`, 'gi');
+                    textEl.innerHTML = originalText.replace(regex, '<span class="highlight-text">$1</span>');
+                } else {
+                    textEl.textContent = originalText;
+                }
+            });
+            
+            noResults.classList.toggle('hidden', visibleCount > 0);
+        });
+        
+        searchClear.addEventListener('click', () => {
+            searchInput.value = '';
+            searchInput.dispatchEvent(new Event('input'));
+            searchInput.focus();
+        });
+        
+        // 处理文件
+        async function handleFile(file) {
+            if (!file.type.startsWith('image/')) return;
+            
+            showPage('loading');
+            searchInput.value = '';
+            
+            try {
+                const base64 = await fileToBase64(file);
+                const response = await fetch('/som', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: base64, return_image: true })
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showResult(data);
+                } else {
+                    alert(data.error || '识别失败');
+                    showPage('home');
+                }
+            } catch (err) {
+                alert('请求失败: ' + err.message);
+                showPage('home');
+            }
+        }
+        
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+        
+        function showPage(page) {
+            homePage.classList.toggle('hidden', page !== 'home');
+            loadingPage.classList.toggle('hidden', page !== 'loading');
+            resultPage.classList.toggle('hidden', page !== 'result');
+        }
+        
+        function showResult(data) {
+            currentElements = data.elements;
+            
+            // 显示图片
+            resultImg.src = 'data:image/png;base64,' + data.marked_image;
+            resultImg.onload = () => {
+                imgNaturalWidth = resultImg.naturalWidth;
+                imgNaturalHeight = resultImg.naturalHeight;
+                fitToScreen();
+            };
+            
+            // 统计
+            const textCount = data.elements.filter(e => e.type === 'text').length;
+            stats.textContent = `${data.count} 个元素，${textCount} 个文字`;
+            
+            // 元素列表
+            elementList.innerHTML = data.elements.map((el, idx) => `
+                <div class="element-item" data-idx="${idx}" data-box="${el.box.join(',')}">
+                    <span class="element-id">${el.id}</span>
+                    <div class="element-info">
+                        <div class="element-text">${el.text || '[UI 元素]'}</div>
+                        <div class="element-meta">[${el.box.join(', ')}]</div>
+                    </div>
+                </div>
+            `).join('');
+            
+            // 点击元素高亮
+            elementList.querySelectorAll('.element-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    // 更新选中状态
+                    elementList.querySelectorAll('.element-item').forEach(i => i.classList.remove('active'));
+                    item.classList.add('active');
+                    
+                    // 显示高亮框
+                    const box = item.dataset.box.split(',').map(Number);
+                    showHighlight(box);
+                });
+            });
+            
+            noResults.classList.add('hidden');
+            showPage('result');
+        }
+        
+        function showHighlight(box) {
+            const [x1, y1, x2, y2] = box;
+            const displayWidth = resultImg.width;
+            const scaleRatio = displayWidth / imgNaturalWidth;
+            
+            highlightBox.style.left = (x1 * scaleRatio) + 'px';
+            highlightBox.style.top = (y1 * scaleRatio) + 'px';
+            highlightBox.style.width = ((x2 - x1) * scaleRatio) + 'px';
+            highlightBox.style.height = ((y2 - y1) * scaleRatio) + 'px';
+            
+            // 显示聚焦效果
+            highlightBox.classList.add('active');
+            focusOverlay.classList.add('active');
+            
+            // 2秒后自动取消
+            clearTimeout(focusTimeout);
+            focusTimeout = setTimeout(() => {
+                focusOverlay.classList.remove('active');
+            }, 2000);
+        }
+        
+        // 适应屏幕
+        function fitToScreen() {
+            const containerRect = viewerContainer.getBoundingClientRect();
+            const padding = 40;
+            const maxWidth = containerRect.width - padding * 2;
+            const maxHeight = containerRect.height - padding * 2;
+            
+            const widthRatio = maxWidth / imgNaturalWidth;
+            const heightRatio = maxHeight / imgNaturalHeight;
+            scale = Math.min(widthRatio, heightRatio, 1);
+            
+            translateX = 0;
+            translateY = 0;
+            updateTransform();
+        }
+        
+        // 缩放控制
+        function updateTransform() {
+            viewerCanvas.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+            zoomIndicator.textContent = Math.round(scale * 100) + '%';
+        }
+        
+        function resetView() {
+            fitToScreen();
+            highlightBox.classList.remove('active');
+            focusOverlay.classList.remove('active');
+            elementList.querySelectorAll('.element-item').forEach(i => i.classList.remove('active'));
+        }
+        
+        zoomInBtn.addEventListener('click', () => {
+            scale = Math.min(scale * 1.25, 5);
+            updateTransform();
+        });
+        
+        zoomOutBtn.addEventListener('click', () => {
+            scale = Math.max(scale / 1.25, 0.1);
+            updateTransform();
+        });
+        
+        resetBtn.addEventListener('click', resetView);
+        
+        // 滚轮缩放
+        viewerContainer.addEventListener('wheel', e => {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? 0.9 : 1.1;
+            scale = Math.max(0.1, Math.min(5, scale * delta));
+            updateTransform();
+        });
+        
+        // 拖动
+        viewerContainer.addEventListener('mousedown', e => {
+            isDragging = true;
+            startX = e.clientX - translateX;
+            startY = e.clientY - translateY;
+        });
+        
+        document.addEventListener('mousemove', e => {
+            if (!isDragging) return;
+            translateX = e.clientX - startX;
+            translateY = e.clientY - startY;
+            updateTransform();
+        });
+        
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+    </script>
+</body>
+</html>
