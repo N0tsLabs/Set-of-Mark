@@ -99,15 +99,6 @@ curl -X POST http://localhost:5000/som \
   -d '{"image_path": "/path/to/screenshot.png"}'
 ```
 
-### 方式 3: Node.js
-
-```javascript
-import { runOcrSom } from 'ocr-som';
-
-const result = await runOcrSom('screenshot.png');
-console.log(result.elements);
-```
-
 ## HTTP API 文档
 
 ### `GET /health`
