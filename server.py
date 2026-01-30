@@ -185,6 +185,13 @@ def som():
             options['detect_contours'] = False
         
         # 运行 OCR
+        import time
+        start_time = time.time()
+        print(f"\n[请求] /som - 开始处理图片...")
+        print(f"  参数: ocr_only={options['ocr_only']}, detect_contours={options['detect_contours']}")
+        if options['detect_contours']:
+            print(f"  轮廓: min_area={options['min_area']}, max_area={options['max_area']}, min_size={options['min_size']}")
+        
         ocr_instance = get_ocr()
         result = ocr_instance.ocr(str(image_path), cls=True)
         
@@ -240,6 +247,11 @@ def som():
             os.unlink(marked_image_path)
         
         cleanup_temp_file(image_path)
+        
+        elapsed = time.time() - start_time
+        text_count = sum(1 for el in elements if el.get('type') == 'text')
+        ui_count = sum(1 for el in elements if el.get('type') == 'ui')
+        print(f"  完成! 耗时 {elapsed:.2f}s, 识别 {text_count} 个文字, {ui_count} 个UI元素")
         
         return jsonify(response)
     

@@ -386,6 +386,9 @@
         .viewer-img {
             display: block;
             max-width: none;
+            user-select: none;
+            -webkit-user-drag: none;
+            pointer-events: none;
             border-radius: 4px;
         }
         
@@ -604,7 +607,7 @@
                     <rect width="100%" height="100%" fill="rgba(0,0,0,0.75)" mask="url(#spotlightMask)"/>
                 </svg>
                 <div class="viewer-canvas" id="viewerCanvas">
-                    <img class="viewer-img" id="resultImg">
+                    <img class="viewer-img" id="resultImg" draggable="false">
                     <div class="highlight-box" id="highlightBox"></div>
                     <div class="guide-arrow" id="guideArrow">
                         <svg viewBox="0 0 30 30" fill="none">
@@ -778,12 +781,25 @@
         });
         
         // 上传按钮
-        uploadBtn.addEventListener('click', () => fileInput.click());
-        newUploadBtn.addEventListener('click', () => fileInput.click());
+        uploadBtn.addEventListener('click', () => {
+            fileInput.value = '';  // 清空，允许选择同一文件
+            fileInput.click();
+        });
+        newUploadBtn.addEventListener('click', () => {
+            fileInput.value = '';
+            fileInput.click();
+        });
         
-        // 拖拽上传
-        document.body.addEventListener('dragover', e => {
-            e.preventDefault();
+        // 阻止浏览器默认拖拽行为（防止刷新页面）
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            window.addEventListener(eventName, e => {
+                e.preventDefault();
+                e.stopPropagation();
+            }, false);
+        });
+        
+        // 拖拽上传视觉反馈
+        document.body.addEventListener('dragover', () => {
             if (!resultPage.classList.contains('hidden')) return;
             homePage.style.background = '#f8f8f8';
         });
@@ -791,7 +807,6 @@
             homePage.style.background = '';
         });
         document.body.addEventListener('drop', e => {
-            e.preventDefault();
             homePage.style.background = '';
             if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
         });
