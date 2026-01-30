@@ -29,8 +29,272 @@ from pathlib import Path
 os.environ["CUDA_VISIBLE_DEVICES"] = os.environ.get("CUDA_VISIBLE_DEVICES", "")
 os.environ["FLAGS_use_mkldnn"] = "0"
 
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, render_template_string
 from flask_cors import CORS
+
+# 网页界面 HTML
+WEB_UI_HTML = '''
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR-SoM 测试</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh; padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { color: white; text-align: center; margin-bottom: 20px; font-size: 2em; }
+        .card { 
+            background: white; border-radius: 16px; padding: 24px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2); margin-bottom: 20px;
+        }
+        .upload-area {
+            border: 3px dashed #ddd; border-radius: 12px; padding: 40px;
+            text-align: center; cursor: pointer; transition: all 0.3s;
+        }
+        .upload-area:hover { border-color: #667eea; background: #f8f9ff; }
+        .upload-area.dragover { border-color: #667eea; background: #f0f2ff; }
+        .upload-icon { font-size: 48px; margin-bottom: 10px; }
+        .upload-text { color: #666; font-size: 16px; }
+        .upload-hint { color: #999; font-size: 13px; margin-top: 8px; }
+        input[type="file"] { display: none; }
+        .btn {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white; border: none; padding: 12px 32px; border-radius: 8px;
+            font-size: 16px; cursor: pointer; transition: transform 0.2s;
+        }
+        .btn:hover { transform: scale(1.05); }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+        .preview-container { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 20px; }
+        .preview-box { flex: 1; min-width: 300px; }
+        .preview-box h3 { margin-bottom: 12px; color: #333; font-size: 16px; }
+        .preview-img { 
+            width: 100%; border-radius: 8px; border: 1px solid #eee;
+            max-height: 500px; object-fit: contain; background: #f5f5f5;
+        }
+        .result-panel { margin-top: 20px; }
+        .result-panel h3 { margin-bottom: 12px; color: #333; }
+        .result-stats { 
+            display: flex; gap: 20px; margin-bottom: 16px; flex-wrap: wrap;
+        }
+        .stat-item {
+            background: #f8f9ff; padding: 12px 20px; border-radius: 8px;
+            text-align: center;
+        }
+        .stat-value { font-size: 24px; font-weight: bold; color: #667eea; }
+        .stat-label { font-size: 12px; color: #666; margin-top: 4px; }
+        .elements-list {
+            max-height: 300px; overflow-y: auto; border: 1px solid #eee;
+            border-radius: 8px; font-family: monospace; font-size: 13px;
+        }
+        .element-item {
+            padding: 8px 12px; border-bottom: 1px solid #f0f0f0;
+            display: flex; align-items: center; gap: 12px;
+        }
+        .element-item:last-child { border-bottom: none; }
+        .element-id {
+            background: #667eea; color: white; padding: 2px 8px;
+            border-radius: 4px; font-weight: bold; min-width: 30px; text-align: center;
+        }
+        .element-text { flex: 1; color: #333; }
+        .element-box { color: #999; font-size: 12px; }
+        .loading { text-align: center; padding: 40px; color: #666; }
+        .spinner {
+            width: 40px; height: 40px; border: 4px solid #f0f0f0;
+            border-top-color: #667eea; border-radius: 50%;
+            animation: spin 1s linear infinite; margin: 0 auto 16px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .hidden { display: none; }
+        .error { color: #e74c3c; text-align: center; padding: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 OCR-SoM 测试工具</h1>
+        
+        <div class="card">
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📷</div>
+                <div class="upload-text">点击或拖拽上传截图</div>
+                <div class="upload-hint">支持 PNG、JPG、GIF 格式</div>
+            </div>
+            <input type="file" id="fileInput" accept="image/*">
+            
+            <div class="preview-container hidden" id="previewContainer">
+                <div class="preview-box">
+                    <h3>原图</h3>
+                    <img id="originalImg" class="preview-img">
+                </div>
+                <div class="preview-box">
+                    <h3>标注结果</h3>
+                    <img id="markedImg" class="preview-img">
+                </div>
+            </div>
+            
+            <div class="loading hidden" id="loading">
+                <div class="spinner"></div>
+                <div>正在识别中...</div>
+            </div>
+            
+            <div class="error hidden" id="error"></div>
+            
+            <div class="result-panel hidden" id="resultPanel">
+                <h3>识别结果</h3>
+                <div class="result-stats" id="resultStats"></div>
+                <div class="elements-list" id="elementsList"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const previewContainer = document.getElementById('previewContainer');
+        const originalImg = document.getElementById('originalImg');
+        const markedImg = document.getElementById('markedImg');
+        const loading = document.getElementById('loading');
+        const errorDiv = document.getElementById('error');
+        const resultPanel = document.getElementById('resultPanel');
+        const resultStats = document.getElementById('resultStats');
+        const elementsList = document.getElementById('elementsList');
+        
+        // 点击上传
+        uploadArea.addEventListener('click', () => fileInput.click());
+        
+        // 拖拽上传
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+        
+        // 文件选择
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length) {
+                handleFile(fileInput.files[0]);
+            }
+        });
+        
+        async function handleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showError('请上传图片文件');
+                return;
+            }
+            
+            // 显示原图预览
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                originalImg.src = e.target.result;
+                previewContainer.classList.remove('hidden');
+                markedImg.src = '';
+            };
+            reader.readAsDataURL(file);
+            
+            // 调用 API
+            loading.classList.remove('hidden');
+            errorDiv.classList.add('hidden');
+            resultPanel.classList.add('hidden');
+            
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                const response = await fetch('/som', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                // 重新发送带 JSON 的请求以获取 return_image
+                const base64 = await fileToBase64(file);
+                const jsonResponse = await fetch('/som', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: base64, return_image: true })
+                });
+                
+                const data = await jsonResponse.json();
+                
+                if (data.success) {
+                    showResult(data);
+                } else {
+                    showError(data.error || '识别失败');
+                }
+            } catch (err) {
+                showError('请求失败: ' + err.message);
+            } finally {
+                loading.classList.add('hidden');
+            }
+        }
+        
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+        
+        function showResult(data) {
+            // 显示标注图
+            if (data.marked_image) {
+                markedImg.src = 'data:image/png;base64,' + data.marked_image;
+            }
+            
+            // 统计
+            const textCount = data.elements.filter(e => e.type === 'text').length;
+            const contourCount = data.elements.filter(e => e.type === 'contour').length;
+            
+            resultStats.innerHTML = `
+                <div class="stat-item">
+                    <div class="stat-value">${data.count}</div>
+                    <div class="stat-label">总元素数</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${textCount}</div>
+                    <div class="stat-label">文字元素</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${contourCount}</div>
+                    <div class="stat-label">UI 轮廓</div>
+                </div>
+            `;
+            
+            // 元素列表
+            elementsList.innerHTML = data.elements.map(el => `
+                <div class="element-item">
+                    <span class="element-id">${el.id}</span>
+                    <span class="element-text">${el.text || '[UI 元素]'}</span>
+                    <span class="element-box">[${el.box.join(', ')}]</span>
+                </div>
+            `).join('');
+            
+            resultPanel.classList.remove('hidden');
+        }
+        
+        function showError(msg) {
+            errorDiv.textContent = msg;
+            errorDiv.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
+'''
 
 # 延迟导入 PaddleOCR（首次加载较慢）
 _ocr_instance = None
@@ -60,6 +324,11 @@ def is_gpu_available():
 
 app = Flask(__name__)
 CORS(app)  # 允许跨域请求
+
+@app.route('/', methods=['GET'])
+def index():
+    """网页测试界面"""
+    return render_template_string(WEB_UI_HTML)
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -350,7 +619,8 @@ def main():
     print("=" * 60)
     print(f"\n  Device: {'GPU' if is_gpu_available() else 'CPU'}")
     print(f"  Server: http://{args.host}:{args.port}")
-    print("\n  Endpoints:")
+    print(f"\n  Web UI: http://{args.host}:{args.port}/")
+    print("\n  API Endpoints:")
     print("    POST /ocr  - OCR text recognition")
     print("    POST /som  - Generate SoM marked image")
     print("    GET /health - Health check")
