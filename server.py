@@ -58,6 +58,10 @@ def get_ocr():
             det_model_dir=str(MODELS_DIR / "det"),
             rec_model_dir=str(MODELS_DIR / "rec"),
             cls_model_dir=str(MODELS_DIR / "cls"),
+            # 降低检测阈值，让更多文字被识别
+            det_db_thresh=0.2,       # 默认0.3，降低可检测更多
+            det_db_box_thresh=0.4,   # 默认0.5，降低可保留更多框
+            det_db_unclip_ratio=1.8, # 默认1.6，增大可合并相邻文字
         )
         print("PaddleOCR 加载完成!")
     return _ocr_instance
