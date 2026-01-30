@@ -544,8 +544,8 @@ def cleanup_temp_file(path):
         except:
             pass
 
-def detect_ui_contours(image_path, min_area=100, max_area=100000):
-    """检测 UI 轮廓 - 增强版"""
+def detect_ui_contours(image_path, min_area=800, max_area=50000):
+    """检测 UI 轮廓 - 只检测明显的 UI 元素"""
     import cv2
     import numpy as np
     
@@ -553,87 +553,53 @@ def detect_ui_contours(image_path, min_area=100, max_area=100000):
     if img is None:
         return []
     
-    h, w = img.shape[:2]
+    img_h, img_w = img.shape[:2]
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     elements = []
     seen_boxes = set()
     
     def add_element(x, y, w, h):
-        """添加元素，避免重复"""
+        """添加元素，严格去重"""
         # 边界检查
-        if x < 0 or y < 0 or x + w > img.shape[1] or y + h > img.shape[0]:
+        if x < 0 or y < 0 or x + w > img_w or y + h > img_h:
             return
-        # 尺寸检查（最小 12x12，排除太大的）
-        if w < 12 or h < 12 or w * h > max_area:
+        # 尺寸检查（最小 24x24，排除太小和太大的）
+        if w < 24 or h < 24 or w * h < min_area or w * h > max_area:
             return
-        # 宽高比检查（0.1 到 10）
+        # 宽高比检查（0.2 到 5，排除太扁或太窄的）
         aspect = w / h if h > 0 else 0
-        if aspect < 0.1 or aspect > 10:
+        if aspect < 0.2 or aspect > 5:
             return
-        # 去重（允许 5 像素误差）
-        key = (x // 5, y // 5, w // 5, h // 5)
-        if key in seen_boxes:
-            return
-        seen_boxes.add(key)
+        # 严格去重（20 像素容差）
+        for (sx, sy, sw, sh) in seen_boxes:
+            # 检查是否重叠或包含
+            if abs(x - sx) < 20 and abs(y - sy) < 20:
+                return
+            # 检查是否被包含
+            if sx <= x and sy <= y and sx + sw >= x + w and sy + sh >= y + h:
+                return
+        seen_boxes.add((x, y, w, h))
         elements.append({
             "id": 0,
             "type": "contour",
             "box": [int(x), int(y), int(x + w), int(y + h)],
         })
     
-    # 方法 1: Canny 边缘检测（多阈值）
-    for low, high in [(30, 100), (50, 150), (80, 200)]:
-        edges = cv2.Canny(gray, low, high)
-        kernel = np.ones((2, 2), np.uint8)
-        edges = cv2.dilate(edges, kernel, iterations=1)
-        contours, _ = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        
-        for cnt in contours:
-            area = cv2.contourArea(cnt)
-            if min_area < area < max_area:
-                x, y, w, h = cv2.boundingRect(cnt)
-                add_element(x, y, w, h)
-    
-    # 方法 2: 自适应阈值
-    thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                                    cv2.THRESH_BINARY_INV, 11, 2)
-    contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    
-    for cnt in contours:
-        area = cv2.contourArea(cnt)
-        if min_area < area < max_area:
-            x, y, w, h = cv2.boundingRect(cnt)
-            add_element(x, y, w, h)
-    
-    # 方法 3: 颜色聚类检测（检测与背景不同的区域）
-    # 检测图标按钮等彩色元素
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    
-    # 检测高饱和度区域（彩色图标）
-    saturation = hsv[:, :, 1]
-    _, sat_mask = cv2.threshold(saturation, 50, 255, cv2.THRESH_BINARY)
-    contours, _ = cv2.findContours(sat_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    for cnt in contours:
-        area = cv2.contourArea(cnt)
-        if min_area < area < max_area:
-            x, y, w, h = cv2.boundingRect(cnt)
-            add_element(x, y, w, h)
-    
-    # 方法 4: 检测矩形形状（按钮通常是矩形）
+    # 只用一种方法：Canny 边缘检测
     edges = cv2.Canny(gray, 50, 150)
-    lines = cv2.HoughLinesP(edges, 1, np.pi/90, threshold=30, minLineLength=15, maxLineGap=5)
+    kernel = np.ones((3, 3), np.uint8)
+    edges = cv2.dilate(edges, kernel, iterations=1)
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
-    if lines is not None:
-        # 找水平和垂直线的交点形成的矩形
-        h_lines = []
-        v_lines = []
-        for line in lines:
-            x1, y1, x2, y2 = line[0]
-            if abs(y2 - y1) < 5:  # 水平线
-                h_lines.append((min(x1, x2), max(x1, x2), (y1 + y2) // 2))
-            elif abs(x2 - x1) < 5:  # 垂直线
-                v_lines.append((min(y1, y2), max(y1, y2), (x1 + x2) // 2))
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+        if min_area < area < max_area:
+            x, y, w, h = cv2.boundingRect(cnt)
+            # 检查轮廓是否接近矩形（按钮通常是矩形）
+            rect_area = w * h
+            fill_ratio = area / rect_area if rect_area > 0 else 0
+            if fill_ratio > 0.5:  # 填充率大于 50% 才认为是有效元素
+                add_element(x, y, w, h)
     
     return elements
 
