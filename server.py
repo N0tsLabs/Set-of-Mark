@@ -641,6 +641,11 @@ def main():
     print(f"\n服务已启动: http://{args.host}:{args.port}")
     print("按 Ctrl+C 停止服务\n")
     
+    # 禁用 Flask/Werkzeug 默认日志
+    import logging
+    log = logging.getLogger('werkzeug')
+    log.setLevel(logging.ERROR)
+    
     app.run(host=args.host, port=args.port, debug=args.debug)
 
 if __name__ == "__main__":
