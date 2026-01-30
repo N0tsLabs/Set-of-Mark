@@ -23,7 +23,7 @@
 
 | 原始截图 | SoM 标注后 |
 |---------|-----------|
-| ![原图](docs/demo-before.png) | ![标注](docs/demo.png) |
+| ![原图](docs/demo-before.png) | ![标注](docs/demo-after.png) |
 
 每个可交互元素都被框出来并标上了编号，AI 只需要说出编号即可精准定位。
 
