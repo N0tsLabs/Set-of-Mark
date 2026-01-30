@@ -32,7 +32,7 @@ os.environ["FLAGS_use_mkldnn"] = "0"
 from flask import Flask, request, jsonify, send_file, render_template_string
 from flask_cors import CORS
 
-# 网页界面 HTML - 白色简约主题
+# 网页界面 HTML
 WEB_UI_HTML = '''
 <!DOCTYPE html>
 <html lang="zh">
@@ -42,235 +42,352 @@ WEB_UI_HTML = '''
     <title>OCR-SoM</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: #f5f5f5;
-            min-height: 100vh;
-        }
-        .header {
-            background: white;
-            border-bottom: 1px solid #e0e0e0;
-            padding: 16px 24px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .header h1 { font-size: 18px; font-weight: 600; color: #333; }
-        .header .status { font-size: 13px; color: #666; }
-        .main { padding: 24px; max-width: 1400px; margin: 0 auto; }
-        
-        /* 上传区域 */
-        .upload-section { text-align: center; padding: 60px 20px; }
-        .upload-section.has-result { padding: 20px; }
-        .upload-btn {
-            background: #333;
-            color: white;
-            border: none;
-            padding: 14px 36px;
-            border-radius: 8px;
-            font-size: 15px;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-        .upload-btn:hover { background: #555; }
-        .upload-hint { color: #999; font-size: 13px; margin-top: 12px; }
-        input[type="file"] { display: none; }
-        
-        /* 结果区域 */
-        .result-section { display: none; }
-        .result-section.show { display: block; }
-        
-        /* 图片查看器 */
-        .viewer {
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+        html, body { 
+            height: 100%; 
             overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #fff;
+        }
+        input[type="file"] { display: none; }
+        .hidden { display: none !important; }
+        
+        /* ===== 首页 ===== */
+        .home {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .home-title {
+            font-size: 48px;
+            font-weight: 300;
+            color: #222;
+            margin-bottom: 8px;
+            letter-spacing: -1px;
+        }
+        .home-subtitle {
+            font-size: 15px;
+            color: #999;
+            margin-bottom: 48px;
+        }
+        .home-btn {
+            background: #222;
+            color: #fff;
+            border: none;
+            padding: 16px 48px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .home-btn:hover { background: #444; transform: scale(1.02); }
+        .home-hint {
+            margin-top: 16px;
+            font-size: 13px;
+            color: #bbb;
+        }
+        .home-device {
+            position: absolute;
+            bottom: 24px;
+            font-size: 12px;
+            color: #ccc;
+        }
+        
+        /* ===== 加载页 ===== */
+        .loading-page {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .spinner {
+            width: 40px; height: 40px;
+            border: 3px solid #eee;
+            border-top-color: #222;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
             margin-bottom: 20px;
         }
-        .viewer-header {
-            padding: 12px 16px;
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text { color: #666; font-size: 15px; }
+        
+        /* ===== 结果页 ===== */
+        .result-page {
+            height: 100%;
+            display: flex;
+        }
+        
+        /* 左侧面板 */
+        .left-panel {
+            width: 360px;
+            min-width: 360px;
+            height: 100%;
+            border-right: 1px solid #eee;
+            display: flex;
+            flex-direction: column;
+            background: #fafafa;
+        }
+        .panel-header {
+            padding: 16px 20px;
             border-bottom: 1px solid #eee;
+            background: #fff;
             display: flex;
             align-items: center;
             justify-content: space-between;
         }
-        .viewer-title { font-size: 14px; font-weight: 500; color: #333; }
-        .viewer-stats { font-size: 13px; color: #666; }
-        .viewer-body {
-            padding: 16px;
-            background: #fafafa;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 300px;
-        }
-        .viewer-img {
-            max-width: 100%;
-            max-height: 70vh;
+        .panel-title { font-size: 15px; font-weight: 600; color: #333; }
+        .panel-stats { font-size: 12px; color: #999; }
+        .panel-actions { display: flex; gap: 8px; }
+        .panel-btn {
+            background: #f5f5f5;
+            border: none;
+            padding: 6px 12px;
             border-radius: 4px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            font-size: 12px;
+            color: #666;
+            cursor: pointer;
         }
+        .panel-btn:hover { background: #eee; }
         
-        /* 文字结果 */
-        .text-result {
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-            overflow: hidden;
-        }
-        .text-result-header {
-            padding: 12px 16px;
-            border-bottom: 1px solid #eee;
-            font-size: 14px;
-            font-weight: 500;
-            color: #333;
-        }
-        .text-list {
-            max-height: 400px;
+        .element-list {
+            flex: 1;
             overflow-y: auto;
         }
-        .text-item {
-            padding: 10px 16px;
+        .element-item {
+            padding: 12px 20px;
             border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            transition: background 0.15s;
             display: flex;
             align-items: center;
             gap: 12px;
-            font-size: 14px;
         }
-        .text-item:last-child { border-bottom: none; }
-        .text-item:hover { background: #f9f9f9; }
-        .text-id {
-            background: #333;
-            color: white;
-            padding: 2px 8px;
+        .element-item:hover { background: #f0f0f0; }
+        .element-item.active { background: #e8f4ff; }
+        .element-id {
+            background: #222;
+            color: #fff;
+            padding: 3px 8px;
             border-radius: 4px;
-            font-size: 12px;
-            font-weight: 500;
+            font-size: 11px;
+            font-weight: 600;
             min-width: 28px;
             text-align: center;
         }
-        .text-content { flex: 1; color: #333; }
-        .text-coords { color: #999; font-size: 12px; font-family: monospace; }
-        
-        /* 加载状态 */
-        .loading {
-            text-align: center;
-            padding: 60px 20px;
-            color: #666;
-        }
-        .spinner {
-            width: 32px;
-            height: 32px;
-            border: 3px solid #eee;
-            border-top-color: #333;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            margin: 0 auto 16px;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        
-        .error {
-            text-align: center;
-            padding: 20px;
-            color: #e53935;
+        .element-item.active .element-id { background: #0066cc; }
+        .element-info { flex: 1; min-width: 0; }
+        .element-text {
             font-size: 14px;
+            color: #333;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
-        .hidden { display: none !important; }
+        .element-meta {
+            font-size: 11px;
+            color: #999;
+            margin-top: 2px;
+            font-family: monospace;
+        }
+        
+        /* 右侧图片查看器 */
+        .right-panel {
+            flex: 1;
+            height: 100%;
+            background: #f5f5f5;
+            position: relative;
+            overflow: hidden;
+        }
+        .viewer-toolbar {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            display: flex;
+            gap: 8px;
+            z-index: 10;
+        }
+        .viewer-btn {
+            background: rgba(255,255,255,0.95);
+            border: none;
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: all 0.2s;
+        }
+        .viewer-btn:hover { background: #fff; transform: scale(1.05); }
+        
+        .viewer-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: grab;
+        }
+        .viewer-container:active { cursor: grabbing; }
+        .viewer-canvas {
+            position: relative;
+            transform-origin: center center;
+            transition: transform 0.1s ease-out;
+        }
+        .viewer-img {
+            display: block;
+            max-width: none;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+            border-radius: 4px;
+        }
+        
+        /* 高亮框 */
+        .highlight-box {
+            position: absolute;
+            border: 3px solid #0066cc;
+            background: rgba(0, 102, 204, 0.15);
+            border-radius: 4px;
+            pointer-events: none;
+            transition: all 0.2s;
+            box-shadow: 0 0 0 4px rgba(0, 102, 204, 0.3);
+        }
+        
+        /* 缩放提示 */
+        .zoom-indicator {
+            position: absolute;
+            bottom: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.7);
+            color: #fff;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+        }
+        
+        /* 错误提示 */
+        .error-msg {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #e53935;
+            font-size: 15px;
+        }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>OCR-SoM</h1>
-        <span class="status" id="deviceStatus"></span>
+    <!-- 首页 -->
+    <div class="home" id="homePage">
+        <h1 class="home-title">OCR-SoM</h1>
+        <p class="home-subtitle">基于 PaddleOCR 的视觉标注工具</p>
+        <button class="home-btn" id="uploadBtn">选择图片</button>
+        <p class="home-hint">支持拖拽上传 PNG、JPG、GIF</p>
+        <div class="home-device" id="deviceInfo"></div>
+    </div>
+    <input type="file" id="fileInput" accept="image/*">
+    
+    <!-- 加载页 -->
+    <div class="loading-page hidden" id="loadingPage">
+        <div class="spinner"></div>
+        <div class="loading-text">正在识别...</div>
     </div>
     
-    <div class="main">
-        <div class="upload-section" id="uploadSection">
-            <button class="upload-btn" id="uploadBtn">选择图片</button>
-            <p class="upload-hint">支持 PNG、JPG、GIF 格式，点击或拖拽上传</p>
-        </div>
-        <input type="file" id="fileInput" accept="image/*">
-        
-        <div class="loading hidden" id="loading">
-            <div class="spinner"></div>
-            <div>识别中...</div>
-        </div>
-        
-        <div class="error hidden" id="error"></div>
-        
-        <div class="result-section" id="resultSection">
-            <div class="viewer">
-                <div class="viewer-header">
-                    <span class="viewer-title">标注结果</span>
-                    <span class="viewer-stats" id="stats"></span>
+    <!-- 结果页 -->
+    <div class="result-page hidden" id="resultPage">
+        <div class="left-panel">
+            <div class="panel-header">
+                <div>
+                    <div class="panel-title">识别结果</div>
+                    <div class="panel-stats" id="stats"></div>
                 </div>
-                <div class="viewer-body">
-                    <img id="resultImg" class="viewer-img">
+                <div class="panel-actions">
+                    <button class="panel-btn" id="newUploadBtn">重新上传</button>
                 </div>
             </div>
-            
-            <div class="text-result">
-                <div class="text-result-header">识别文字</div>
-                <div class="text-list" id="textList"></div>
+            <div class="element-list" id="elementList"></div>
+        </div>
+        <div class="right-panel">
+            <div class="viewer-toolbar">
+                <button class="viewer-btn" id="zoomInBtn" title="放大">+</button>
+                <button class="viewer-btn" id="zoomOutBtn" title="缩小">−</button>
+                <button class="viewer-btn" id="resetBtn" title="重置">↺</button>
             </div>
+            <div class="viewer-container" id="viewerContainer">
+                <div class="viewer-canvas" id="viewerCanvas">
+                    <img class="viewer-img" id="resultImg">
+                    <div class="highlight-box hidden" id="highlightBox"></div>
+                </div>
+            </div>
+            <div class="zoom-indicator" id="zoomIndicator">100%</div>
         </div>
     </div>
     
     <script>
-        const uploadSection = document.getElementById('uploadSection');
+        // 元素引用
+        const homePage = document.getElementById('homePage');
+        const loadingPage = document.getElementById('loadingPage');
+        const resultPage = document.getElementById('resultPage');
         const uploadBtn = document.getElementById('uploadBtn');
+        const newUploadBtn = document.getElementById('newUploadBtn');
         const fileInput = document.getElementById('fileInput');
-        const loading = document.getElementById('loading');
-        const errorDiv = document.getElementById('error');
-        const resultSection = document.getElementById('resultSection');
-        const resultImg = document.getElementById('resultImg');
+        const deviceInfo = document.getElementById('deviceInfo');
         const stats = document.getElementById('stats');
-        const textList = document.getElementById('textList');
-        const deviceStatus = document.getElementById('deviceStatus');
+        const elementList = document.getElementById('elementList');
+        const resultImg = document.getElementById('resultImg');
+        const viewerContainer = document.getElementById('viewerContainer');
+        const viewerCanvas = document.getElementById('viewerCanvas');
+        const highlightBox = document.getElementById('highlightBox');
+        const zoomIndicator = document.getElementById('zoomIndicator');
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        
+        // 状态
+        let currentElements = [];
+        let scale = 1;
+        let translateX = 0;
+        let translateY = 0;
+        let isDragging = false;
+        let startX, startY;
+        let imgNaturalWidth = 0;
+        let imgNaturalHeight = 0;
         
         // 获取设备信息
         fetch('/info').then(r => r.json()).then(data => {
-            deviceStatus.textContent = data.device;
+            deviceInfo.textContent = `运行于 ${data.device}`;
         });
         
-        // 点击上传
+        // 上传按钮
         uploadBtn.addEventListener('click', () => fileInput.click());
+        newUploadBtn.addEventListener('click', () => fileInput.click());
         
         // 拖拽上传
-        document.body.addEventListener('dragover', (e) => {
+        document.body.addEventListener('dragover', e => {
             e.preventDefault();
-            uploadSection.style.background = '#f0f0f0';
+            if (!resultPage.classList.contains('hidden')) return;
+            homePage.style.background = '#f8f8f8';
         });
         document.body.addEventListener('dragleave', () => {
-            uploadSection.style.background = '';
+            homePage.style.background = '';
         });
-        document.body.addEventListener('drop', (e) => {
+        document.body.addEventListener('drop', e => {
             e.preventDefault();
-            uploadSection.style.background = '';
-            if (e.dataTransfer.files.length) {
-                handleFile(e.dataTransfer.files[0]);
-            }
+            homePage.style.background = '';
+            if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
         });
         
         // 文件选择
         fileInput.addEventListener('change', () => {
-            if (fileInput.files.length) {
-                handleFile(fileInput.files[0]);
-            }
+            if (fileInput.files.length) handleFile(fileInput.files[0]);
         });
         
+        // 处理文件
         async function handleFile(file) {
-            if (!file.type.startsWith('image/')) {
-                showError('请上传图片文件');
-                return;
-            }
+            if (!file.type.startsWith('image/')) return;
             
-            // 显示加载
-            loading.classList.remove('hidden');
-            errorDiv.classList.add('hidden');
-            resultSection.classList.remove('show');
-            uploadSection.classList.add('has-result');
+            showPage('loading');
             
             try {
                 const base64 = await fileToBase64(file);
@@ -279,18 +396,17 @@ WEB_UI_HTML = '''
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ image: base64, return_image: true })
                 });
-                
                 const data = await response.json();
                 
                 if (data.success) {
                     showResult(data);
                 } else {
-                    showError(data.error || '识别失败');
+                    alert(data.error || '识别失败');
+                    showPage('home');
                 }
             } catch (err) {
-                showError('请求失败: ' + err.message);
-            } finally {
-                loading.classList.add('hidden');
+                alert('请求失败: ' + err.message);
+                showPage('home');
             }
         }
         
@@ -303,33 +419,117 @@ WEB_UI_HTML = '''
             });
         }
         
+        function showPage(page) {
+            homePage.classList.toggle('hidden', page !== 'home');
+            loadingPage.classList.toggle('hidden', page !== 'loading');
+            resultPage.classList.toggle('hidden', page !== 'result');
+        }
+        
         function showResult(data) {
-            // 显示标注图
-            if (data.marked_image) {
-                resultImg.src = 'data:image/png;base64,' + data.marked_image;
-            }
+            currentElements = data.elements;
+            
+            // 显示图片
+            resultImg.src = 'data:image/png;base64,' + data.marked_image;
+            resultImg.onload = () => {
+                imgNaturalWidth = resultImg.naturalWidth;
+                imgNaturalHeight = resultImg.naturalHeight;
+                resetView();
+            };
             
             // 统计
             const textCount = data.elements.filter(e => e.type === 'text').length;
-            stats.textContent = `共 ${data.count} 个元素，${textCount} 个文字`;
+            stats.textContent = `${data.count} 个元素，${textCount} 个文字`;
             
-            // 文字列表
-            const textElements = data.elements.filter(e => e.type === 'text');
-            textList.innerHTML = textElements.map(el => `
-                <div class="text-item">
-                    <span class="text-id">${el.id}</span>
-                    <span class="text-content">${el.text}</span>
-                    <span class="text-coords">[${el.box.join(', ')}]</span>
+            // 元素列表
+            elementList.innerHTML = data.elements.map((el, idx) => `
+                <div class="element-item" data-idx="${idx}" data-box="${el.box.join(',')}">
+                    <span class="element-id">${el.id}</span>
+                    <div class="element-info">
+                        <div class="element-text">${el.text || '[UI 元素]'}</div>
+                        <div class="element-meta">[${el.box.join(', ')}]</div>
+                    </div>
                 </div>
-            `).join('') || '<div class="text-item"><span class="text-content" style="color:#999">未识别到文字</span></div>';
+            `).join('');
             
-            resultSection.classList.add('show');
+            // 点击元素高亮
+            elementList.querySelectorAll('.element-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    // 更新选中状态
+                    elementList.querySelectorAll('.element-item').forEach(i => i.classList.remove('active'));
+                    item.classList.add('active');
+                    
+                    // 显示高亮框
+                    const box = item.dataset.box.split(',').map(Number);
+                    showHighlight(box);
+                });
+            });
+            
+            showPage('result');
         }
         
-        function showError(msg) {
-            errorDiv.textContent = msg;
-            errorDiv.classList.remove('hidden');
+        function showHighlight(box) {
+            const [x1, y1, x2, y2] = box;
+            const scaleRatio = resultImg.width / imgNaturalWidth;
+            
+            highlightBox.style.left = (x1 * scaleRatio) + 'px';
+            highlightBox.style.top = (y1 * scaleRatio) + 'px';
+            highlightBox.style.width = ((x2 - x1) * scaleRatio) + 'px';
+            highlightBox.style.height = ((y2 - y1) * scaleRatio) + 'px';
+            highlightBox.classList.remove('hidden');
         }
+        
+        // 缩放控制
+        function updateTransform() {
+            viewerCanvas.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+            zoomIndicator.textContent = Math.round(scale * 100) + '%';
+        }
+        
+        function resetView() {
+            scale = 1;
+            translateX = 0;
+            translateY = 0;
+            updateTransform();
+            highlightBox.classList.add('hidden');
+            elementList.querySelectorAll('.element-item').forEach(i => i.classList.remove('active'));
+        }
+        
+        zoomInBtn.addEventListener('click', () => {
+            scale = Math.min(scale * 1.25, 5);
+            updateTransform();
+        });
+        
+        zoomOutBtn.addEventListener('click', () => {
+            scale = Math.max(scale / 1.25, 0.25);
+            updateTransform();
+        });
+        
+        resetBtn.addEventListener('click', resetView);
+        
+        // 滚轮缩放
+        viewerContainer.addEventListener('wheel', e => {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? 0.9 : 1.1;
+            scale = Math.max(0.25, Math.min(5, scale * delta));
+            updateTransform();
+        });
+        
+        // 拖动
+        viewerContainer.addEventListener('mousedown', e => {
+            isDragging = true;
+            startX = e.clientX - translateX;
+            startY = e.clientY - translateY;
+        });
+        
+        document.addEventListener('mousemove', e => {
+            if (!isDragging) return;
+            translateX = e.clientX - startX;
+            translateY = e.clientY - startY;
+            updateTransform();
+        });
+        
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
     </script>
 </body>
 </html>
