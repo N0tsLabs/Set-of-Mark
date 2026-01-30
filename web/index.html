@@ -593,6 +593,7 @@
                         <div class="panel-title">识别结果</div>
                         <div class="panel-stats" id="stats"></div>
                     </div>
+                    <button class="panel-btn" id="downloadBtn">💾 下载图片</button>
                     <button class="panel-btn" id="settingsBtn2">⚙️ 设置</button>
                     <button class="panel-btn" id="newUploadBtn">重新上传</button>
                 </div>
@@ -819,6 +820,17 @@
         newUploadBtn.addEventListener('click', () => {
             fileInput.value = '';
             fileInput.click();
+        });
+        
+        // 下载标注图
+        document.getElementById('downloadBtn').addEventListener('click', () => {
+            const img = document.getElementById('resultImg');
+            if (!img.src) return;
+            
+            const link = document.createElement('a');
+            link.download = 'ocr-som-' + Date.now() + '.png';
+            link.href = img.src;
+            link.click();
         });
         
         // 阻止浏览器默认拖拽行为（防止刷新页面）
