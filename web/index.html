@@ -496,12 +496,16 @@
             
             <div class="settings-section" id="contourSettings">
                 <div class="settings-section-title">轮廓检测参数</div>
+                <div style="font-size: 12px; color: #888; margin-bottom: 12px; padding: 8px; background: #f8f8f8; border-radius: 4px;">
+                    💡 这些参数只影响红框（UI轮廓），不影响蓝框（OCR文字）。修改后需重新上传图片。
+                </div>
                 <div class="settings-item">
                     <div class="settings-label">
                         <span class="settings-label-text">最小面积</span>
                         <span class="settings-label-value" id="valMinArea">200</span>
                     </div>
                     <input type="range" class="settings-range" id="optMinArea" min="50" max="2000" value="200">
+                    <div style="font-size: 11px; color: #999; margin-top: 2px;">调小 → 检测更多小图标；调大 → 过滤噪点</div>
                 </div>
                 <div class="settings-item">
                     <div class="settings-label">
@@ -509,6 +513,7 @@
                         <span class="settings-label-value" id="valMaxArea">80000</span>
                     </div>
                     <input type="range" class="settings-range" id="optMaxArea" min="10000" max="200000" value="80000">
+                    <div style="font-size: 11px; color: #999; margin-top: 2px;">调小 → 过滤大色块；调大 → 检测大区域</div>
                 </div>
                 <div class="settings-item">
                     <div class="settings-label">
@@ -516,6 +521,7 @@
                         <span class="settings-label-value" id="valMinSize">16</span>
                     </div>
                     <input type="range" class="settings-range" id="optMinSize" min="8" max="50" value="16">
+                    <div style="font-size: 11px; color: #999; margin-top: 2px;">宽/高的最小像素值</div>
                 </div>
                 <div class="settings-item">
                     <div class="settings-label">
@@ -523,6 +529,7 @@
                         <span class="settings-label-value" id="valFillRatio">0.3</span>
                     </div>
                     <input type="range" class="settings-range" id="optFillRatio" min="0.1" max="0.9" step="0.05" value="0.3">
+                    <div style="font-size: 11px; color: #999; margin-top: 2px;">调小 → 也检测空心框；调大 → 只检测实心区域</div>
                 </div>
                 <div class="settings-item">
                     <div class="settings-label">
@@ -530,7 +537,7 @@
                         <span class="settings-label-value" id="valSaturation">40</span>
                     </div>
                     <input type="range" class="settings-range" id="optSaturation" min="0" max="100" value="40">
-                    <div style="font-size: 11px; color: #999; margin-top: 4px;">设为 0 禁用彩色图标检测</div>
+                    <div style="font-size: 11px; color: #999; margin-top: 2px;">调小 → 也检测灰色元素；设为0 → 禁用彩色检测</div>
                 </div>
             </div>
             
