@@ -27,3 +27,4 @@ Thumbs.db
 
 # Model cache (大文件，不提交)
 .paddleocr/
+models/

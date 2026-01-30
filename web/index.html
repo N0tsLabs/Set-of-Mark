@@ -60,17 +60,14 @@
         
         /* 设置按钮 */
         .settings-btn {
-            position: absolute;
-            top: 24px;
-            right: 24px;
             background: #f5f5f5;
             border: none;
-            width: 40px;
-            height: 40px;
+            padding: 14px 24px;
             border-radius: 8px;
             cursor: pointer;
-            font-size: 18px;
+            font-size: 14px;
             transition: all 0.2s;
+            color: #666;
         }
         .settings-btn:hover { background: #eee; }
         
@@ -470,9 +467,6 @@
     </style>
 </head>
 <body>
-    <!-- 设置按钮（全局） -->
-    <button class="settings-btn" id="settingsBtn" title="设置">⚙️</button>
-    
     <!-- 设置面板 -->
     <div class="settings-overlay" id="settingsOverlay"></div>
     <div class="settings-panel" id="settingsPanel">
@@ -557,7 +551,10 @@
     <div class="home" id="homePage">
         <h1 class="home-title">OCR-SoM</h1>
         <p class="home-subtitle">基于 PaddleOCR 的视觉标注工具</p>
-        <button class="home-btn" id="uploadBtn">选择图片</button>
+        <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+            <button class="home-btn" id="uploadBtn">选择图片</button>
+            <button class="settings-btn" id="settingsBtn">⚙️ 设置</button>
+        </div>
         <p class="home-hint">支持拖拽上传 PNG、JPG、GIF</p>
         <div class="home-device" id="deviceInfo"></div>
     </div>
@@ -578,6 +575,7 @@
                         <div class="panel-title">识别结果</div>
                         <div class="panel-stats" id="stats"></div>
                     </div>
+                    <button class="panel-btn" id="settingsBtn2">⚙️ 设置</button>
                     <button class="panel-btn" id="newUploadBtn">重新上传</button>
                 </div>
                 <div class="search-box">
@@ -685,6 +683,7 @@
             settingsOverlay.classList.remove('open');
         }
         settingsBtn.addEventListener('click', openSettings);
+        document.getElementById('settingsBtn2').addEventListener('click', openSettings);
         settingsClose.addEventListener('click', closeSettings);
         settingsOverlay.addEventListener('click', closeSettings);
         

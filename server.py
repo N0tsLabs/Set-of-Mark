@@ -230,7 +230,7 @@ def som():
         }
         
         # 生成标注图
-        if return_image:
+        if options['return_image']:
             marked_image_path = tempfile.mktemp(suffix=".png")
             draw_som_marks(str(image_path), elements, marked_image_path)
             
