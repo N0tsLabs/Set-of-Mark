@@ -58,6 +58,150 @@
             color: #ccc;
         }
         
+        /* 设置按钮 */
+        .settings-btn {
+            position: absolute;
+            top: 24px;
+            right: 24px;
+            background: #f5f5f5;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 18px;
+            transition: all 0.2s;
+        }
+        .settings-btn:hover { background: #eee; }
+        
+        /* 设置面板 */
+        .settings-panel {
+            position: fixed;
+            top: 0;
+            right: -400px;
+            width: 380px;
+            height: 100%;
+            background: #fff;
+            box-shadow: -4px 0 20px rgba(0,0,0,0.1);
+            z-index: 100;
+            transition: right 0.3s ease;
+            display: flex;
+            flex-direction: column;
+        }
+        .settings-panel.open { right: 0; }
+        .settings-header {
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .settings-title { font-size: 16px; font-weight: 600; }
+        .settings-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #999;
+        }
+        .settings-close:hover { color: #333; }
+        .settings-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        .settings-section {
+            margin-bottom: 24px;
+        }
+        .settings-section-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+        }
+        .settings-item {
+            margin-bottom: 16px;
+        }
+        .settings-label {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+        .settings-label-text { font-size: 14px; color: #333; }
+        .settings-label-value { font-size: 12px; color: #999; font-family: monospace; }
+        .settings-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .settings-input:focus { border-color: #666; outline: none; }
+        .settings-range {
+            width: 100%;
+            height: 6px;
+            -webkit-appearance: none;
+            background: #eee;
+            border-radius: 3px;
+            outline: none;
+        }
+        .settings-range::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #333;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        .settings-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+        }
+        .settings-checkbox input {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        .settings-footer {
+            padding: 16px 20px;
+            border-top: 1px solid #eee;
+            display: flex;
+            gap: 12px;
+        }
+        .settings-footer-btn {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .settings-footer-btn.primary {
+            background: #222;
+            color: #fff;
+        }
+        .settings-footer-btn.secondary {
+            background: #f5f5f5;
+            color: #333;
+        }
+        .settings-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.3);
+            z-index: 99;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+        }
+        .settings-overlay.open { opacity: 1; visibility: visible; }
+        
         /* ===== 加载页 ===== */
         .loading-page {
             height: 100%;
@@ -326,6 +470,89 @@
     </style>
 </head>
 <body>
+    <!-- 设置按钮（全局） -->
+    <button class="settings-btn" id="settingsBtn" title="设置">⚙️</button>
+    
+    <!-- 设置面板 -->
+    <div class="settings-overlay" id="settingsOverlay"></div>
+    <div class="settings-panel" id="settingsPanel">
+        <div class="settings-header">
+            <span class="settings-title">参数设置</span>
+            <button class="settings-close" id="settingsClose">×</button>
+        </div>
+        <div class="settings-body">
+            <div class="settings-section">
+                <div class="settings-section-title">识别模式</div>
+                <div class="settings-item">
+                    <label class="settings-checkbox">
+                        <input type="checkbox" id="optOcrOnly">
+                        <span>仅 OCR（不检测轮廓，速度更快）</span>
+                    </label>
+                </div>
+                <div class="settings-item">
+                    <label class="settings-checkbox">
+                        <input type="checkbox" id="optDetectContours" checked>
+                        <span>检测 UI 轮廓（图标、按钮等）</span>
+                    </label>
+                </div>
+            </div>
+            
+            <div class="settings-section" id="contourSettings">
+                <div class="settings-section-title">轮廓检测参数</div>
+                <div class="settings-item">
+                    <div class="settings-label">
+                        <span class="settings-label-text">最小面积</span>
+                        <span class="settings-label-value" id="valMinArea">200</span>
+                    </div>
+                    <input type="range" class="settings-range" id="optMinArea" min="50" max="2000" value="200">
+                </div>
+                <div class="settings-item">
+                    <div class="settings-label">
+                        <span class="settings-label-text">最大面积</span>
+                        <span class="settings-label-value" id="valMaxArea">80000</span>
+                    </div>
+                    <input type="range" class="settings-range" id="optMaxArea" min="10000" max="200000" value="80000">
+                </div>
+                <div class="settings-item">
+                    <div class="settings-label">
+                        <span class="settings-label-text">最小尺寸</span>
+                        <span class="settings-label-value" id="valMinSize">16</span>
+                    </div>
+                    <input type="range" class="settings-range" id="optMinSize" min="8" max="50" value="16">
+                </div>
+                <div class="settings-item">
+                    <div class="settings-label">
+                        <span class="settings-label-text">填充率阈值</span>
+                        <span class="settings-label-value" id="valFillRatio">0.3</span>
+                    </div>
+                    <input type="range" class="settings-range" id="optFillRatio" min="0.1" max="0.9" step="0.05" value="0.3">
+                </div>
+                <div class="settings-item">
+                    <div class="settings-label">
+                        <span class="settings-label-text">饱和度阈值</span>
+                        <span class="settings-label-value" id="valSaturation">40</span>
+                    </div>
+                    <input type="range" class="settings-range" id="optSaturation" min="0" max="100" value="40">
+                    <div style="font-size: 11px; color: #999; margin-top: 4px;">设为 0 禁用彩色图标检测</div>
+                </div>
+            </div>
+            
+            <div class="settings-section">
+                <div class="settings-section-title">预设</div>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button class="settings-footer-btn secondary" onclick="applyPreset('default')">默认</button>
+                    <button class="settings-footer-btn secondary" onclick="applyPreset('fast')">快速</button>
+                    <button class="settings-footer-btn secondary" onclick="applyPreset('detailed')">详细</button>
+                    <button class="settings-footer-btn secondary" onclick="applyPreset('ocrOnly')">纯 OCR</button>
+                </div>
+            </div>
+        </div>
+        <div class="settings-footer">
+            <button class="settings-footer-btn secondary" id="settingsReset">重置默认</button>
+            <button class="settings-footer-btn primary" id="settingsApply">应用</button>
+        </div>
+    </div>
+    
     <!-- 首页 -->
     <div class="home" id="homePage">
         <h1 class="home-title">OCR-SoM</h1>
@@ -429,6 +656,123 @@
         let imgNaturalHeight = 0;
         let focusTimeout = null;
         
+        // 设置选项
+        let settings = {
+            ocr_only: false,
+            detect_contours: true,
+            min_area: 200,
+            max_area: 80000,
+            min_size: 16,
+            fill_ratio: 0.3,
+            saturation_threshold: 40,
+        };
+        
+        // 设置元素
+        const settingsBtn = document.getElementById('settingsBtn');
+        const settingsPanel = document.getElementById('settingsPanel');
+        const settingsOverlay = document.getElementById('settingsOverlay');
+        const settingsClose = document.getElementById('settingsClose');
+        const settingsReset = document.getElementById('settingsReset');
+        const settingsApply = document.getElementById('settingsApply');
+        
+        // 设置面板开关
+        function openSettings() {
+            settingsPanel.classList.add('open');
+            settingsOverlay.classList.add('open');
+        }
+        function closeSettings() {
+            settingsPanel.classList.remove('open');
+            settingsOverlay.classList.remove('open');
+        }
+        settingsBtn.addEventListener('click', openSettings);
+        settingsClose.addEventListener('click', closeSettings);
+        settingsOverlay.addEventListener('click', closeSettings);
+        
+        // 设置滑块值显示
+        const rangeInputs = [
+            { id: 'optMinArea', valId: 'valMinArea', key: 'min_area' },
+            { id: 'optMaxArea', valId: 'valMaxArea', key: 'max_area' },
+            { id: 'optMinSize', valId: 'valMinSize', key: 'min_size' },
+            { id: 'optFillRatio', valId: 'valFillRatio', key: 'fill_ratio' },
+            { id: 'optSaturation', valId: 'valSaturation', key: 'saturation_threshold' },
+        ];
+        
+        rangeInputs.forEach(({ id, valId, key }) => {
+            const input = document.getElementById(id);
+            const valEl = document.getElementById(valId);
+            input.addEventListener('input', () => {
+                valEl.textContent = input.value;
+                settings[key] = parseFloat(input.value);
+            });
+        });
+        
+        // OCR Only 和 轮廓检测互斥
+        const optOcrOnly = document.getElementById('optOcrOnly');
+        const optDetectContours = document.getElementById('optDetectContours');
+        const contourSettings = document.getElementById('contourSettings');
+        
+        optOcrOnly.addEventListener('change', () => {
+            settings.ocr_only = optOcrOnly.checked;
+            if (optOcrOnly.checked) {
+                optDetectContours.checked = false;
+                settings.detect_contours = false;
+                contourSettings.style.opacity = '0.5';
+                contourSettings.style.pointerEvents = 'none';
+            }
+        });
+        
+        optDetectContours.addEventListener('change', () => {
+            settings.detect_contours = optDetectContours.checked;
+            if (optDetectContours.checked) {
+                optOcrOnly.checked = false;
+                settings.ocr_only = false;
+                contourSettings.style.opacity = '1';
+                contourSettings.style.pointerEvents = 'auto';
+            } else {
+                contourSettings.style.opacity = '0.5';
+                contourSettings.style.pointerEvents = 'none';
+            }
+        });
+        
+        // 预设
+        function applyPreset(preset) {
+            const presets = {
+                default: { ocr_only: false, detect_contours: true, min_area: 200, max_area: 80000, min_size: 16, fill_ratio: 0.3, saturation_threshold: 40 },
+                fast: { ocr_only: true, detect_contours: false, min_area: 200, max_area: 80000, min_size: 16, fill_ratio: 0.3, saturation_threshold: 40 },
+                detailed: { ocr_only: false, detect_contours: true, min_area: 100, max_area: 150000, min_size: 12, fill_ratio: 0.2, saturation_threshold: 30 },
+                ocrOnly: { ocr_only: true, detect_contours: false, min_area: 200, max_area: 80000, min_size: 16, fill_ratio: 0.3, saturation_threshold: 40 },
+            };
+            settings = { ...presets[preset] };
+            updateSettingsUI();
+        }
+        
+        function updateSettingsUI() {
+            optOcrOnly.checked = settings.ocr_only;
+            optDetectContours.checked = settings.detect_contours;
+            document.getElementById('optMinArea').value = settings.min_area;
+            document.getElementById('valMinArea').textContent = settings.min_area;
+            document.getElementById('optMaxArea').value = settings.max_area;
+            document.getElementById('valMaxArea').textContent = settings.max_area;
+            document.getElementById('optMinSize').value = settings.min_size;
+            document.getElementById('valMinSize').textContent = settings.min_size;
+            document.getElementById('optFillRatio').value = settings.fill_ratio;
+            document.getElementById('valFillRatio').textContent = settings.fill_ratio;
+            document.getElementById('optSaturation').value = settings.saturation_threshold;
+            document.getElementById('valSaturation').textContent = settings.saturation_threshold;
+            
+            contourSettings.style.opacity = settings.detect_contours ? '1' : '0.5';
+            contourSettings.style.pointerEvents = settings.detect_contours ? 'auto' : 'none';
+        }
+        
+        settingsReset.addEventListener('click', () => applyPreset('default'));
+        settingsApply.addEventListener('click', () => {
+            closeSettings();
+            // 如果已有结果，提示重新上传
+            if (!resultPage.classList.contains('hidden')) {
+                alert('设置已保存，重新上传图片后生效');
+            }
+        });
+        
         // 获取设备信息
         fetch('/info').then(r => r.json()).then(data => {
             deviceInfo.textContent = `运行于 ${data.device}`;
@@ -504,7 +848,17 @@
                 const response = await fetch('/som', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image: base64, return_image: true })
+                    body: JSON.stringify({ 
+                        image: base64, 
+                        return_image: true,
+                        ocr_only: settings.ocr_only,
+                        detect_contours: settings.detect_contours,
+                        min_area: settings.min_area,
+                        max_area: settings.max_area,
+                        min_size: settings.min_size,
+                        fill_ratio: settings.fill_ratio,
+                        saturation_threshold: settings.saturation_threshold,
+                    })
                 });
                 const data = await response.json();
                 

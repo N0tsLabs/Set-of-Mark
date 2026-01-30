@@ -35,21 +35,29 @@ from flask_cors import CORS
 # 获取项目目录
 PROJECT_DIR = Path(__file__).parent
 WEB_DIR = PROJECT_DIR / "web"
+MODELS_DIR = PROJECT_DIR / "models"
+
+# 确保模型目录存在
+MODELS_DIR.mkdir(exist_ok=True)
 
 # 延迟导入 PaddleOCR（首次加载较慢）
 _ocr_instance = None
 
 def get_ocr():
-    """获取 PaddleOCR 实例（单例）"""
+    """获取 PaddleOCR 实例（单例），模型保存到项目目录"""
     global _ocr_instance
     if _ocr_instance is None:
         from paddleocr import PaddleOCR
         print("正在加载 PaddleOCR 模型...")
+        print(f"模型目录: {MODELS_DIR}")
         _ocr_instance = PaddleOCR(
             use_angle_cls=True,
             use_gpu=is_gpu_available(),
             lang='ch',
             show_log=False,
+            det_model_dir=str(MODELS_DIR / "det"),
+            rec_model_dir=str(MODELS_DIR / "rec"),
+            cls_model_dir=str(MODELS_DIR / "cls"),
         )
         print("PaddleOCR 加载完成!")
     return _ocr_instance
@@ -136,20 +144,45 @@ def ocr():
 
 @app.route('/som', methods=['POST'])
 def som():
-    """生成 SoM 标注图"""
+    """
+    生成 SoM 标注图
+    
+    参数:
+      - detect_contours: bool (默认 true) - 是否检测 UI 轮廓
+      - return_image: bool (默认 true) - 是否返回标注图
+      - min_area: int (默认 200) - 轮廓最小面积
+      - max_area: int (默认 80000) - 轮廓最大面积
+      - min_size: int (默认 16) - 轮廓最小尺寸
+      - fill_ratio: float (默认 0.3) - 轮廓填充率阈值
+      - saturation_threshold: int (默认 40) - 彩色图标饱和度阈值
+      - ocr_only: bool (默认 false) - 仅 OCR，不检测轮廓（快速模式）
+    """
     try:
         image_path = get_image_from_request(request)
         if not image_path:
             return jsonify({"success": False, "error": "未提供图片"}), 400
         
         # 获取选项（兼容 multipart form 和 json）
-        detect_contours = True
-        return_image = True
+        options = {
+            'detect_contours': True,
+            'return_image': True,
+            'min_area': 200,
+            'max_area': 80000,
+            'min_size': 16,
+            'fill_ratio': 0.3,
+            'saturation_threshold': 40,
+            'ocr_only': False,
+        }
         
         if request.is_json:
             data = request.json or {}
-            detect_contours = data.get('detect_contours', True)
-            return_image = data.get('return_image', True)
+            for key in options:
+                if key in data:
+                    options[key] = data[key]
+        
+        # ocr_only 模式下禁用轮廓检测
+        if options['ocr_only']:
+            options['detect_contours'] = False
         
         # 运行 OCR
         ocr_instance = get_ocr()
@@ -176,8 +209,15 @@ def som():
                 })
         
         # 检测 UI 轮廓
-        if detect_contours:
-            ui_elements = detect_ui_contours(image_path)
+        if options['detect_contours']:
+            ui_elements = detect_ui_contours(
+                image_path,
+                min_area=options['min_area'],
+                max_area=options['max_area'],
+                min_size=options['min_size'],
+                fill_ratio=options['fill_ratio'],
+                saturation_threshold=options['saturation_threshold'],
+            )
             start_id = len(elements)
             for i, el in enumerate(ui_elements):
                 el["id"] = start_id + i
@@ -245,8 +285,17 @@ def cleanup_temp_file(path):
         except:
             pass
 
-def detect_ui_contours(image_path, min_area=200, max_area=80000):
-    """检测 UI 轮廓 - 平衡版"""
+def detect_ui_contours(image_path, min_area=200, max_area=80000, min_size=16, fill_ratio=0.3, saturation_threshold=40):
+    """
+    检测 UI 轮廓
+    
+    参数:
+      - min_area: 最小面积
+      - max_area: 最大面积
+      - min_size: 最小尺寸 (宽和高)
+      - fill_ratio: 填充率阈值 (轮廓面积/矩形面积)
+      - saturation_threshold: 彩色图标饱和度阈值
+    """
     import cv2
     import numpy as np
     
@@ -262,7 +311,6 @@ def detect_ui_contours(image_path, min_area=200, max_area=80000):
     def is_duplicate(x, y, w, h):
         """检查是否重复（IoU > 0.5 视为重复）"""
         for (sx, sy, sw, sh) in seen_boxes:
-            # 计算交集
             ix1, iy1 = max(x, sx), max(y, sy)
             ix2, iy2 = min(x + w, sx + sw), min(y + h, sy + sh)
             if ix2 > ix1 and iy2 > iy1:
@@ -274,17 +322,13 @@ def detect_ui_contours(image_path, min_area=200, max_area=80000):
     
     def add_element(x, y, w, h):
         """添加元素"""
-        # 边界检查
         if x < 0 or y < 0 or x + w > img_w or y + h > img_h:
             return
-        # 尺寸检查（最小 16x16）
-        if w < 16 or h < 16 or w * h < min_area or w * h > max_area:
+        if w < min_size or h < min_size or w * h < min_area or w * h > max_area:
             return
-        # 宽高比检查（0.15 到 7）
         aspect = w / h if h > 0 else 0
         if aspect < 0.15 or aspect > 7:
             return
-        # 去重
         if is_duplicate(x, y, w, h):
             return
         seen_boxes.append((x, y, w, h))
@@ -294,7 +338,7 @@ def detect_ui_contours(image_path, min_area=200, max_area=80000):
             "box": [int(x), int(y), int(x + w), int(y + h)],
         })
     
-    # 方法 1: Canny 边缘检测（两组参数）
+    # 方法 1: Canny 边缘检测
     for low, high in [(30, 100), (50, 150)]:
         edges = cv2.Canny(gray, low, high)
         kernel = np.ones((2, 2), np.uint8)
@@ -306,23 +350,24 @@ def detect_ui_contours(image_path, min_area=200, max_area=80000):
             if min_area < area < max_area:
                 x, y, w, h = cv2.boundingRect(cnt)
                 rect_area = w * h
-                fill_ratio = area / rect_area if rect_area > 0 else 0
-                if fill_ratio > 0.3:
+                ratio = area / rect_area if rect_area > 0 else 0
+                if ratio > fill_ratio:
                     add_element(x, y, w, h)
     
     # 方法 2: 检测高饱和度区域（彩色图标）
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    saturation = hsv[:, :, 1]
-    _, sat_mask = cv2.threshold(saturation, 40, 255, cv2.THRESH_BINARY)
-    kernel = np.ones((3, 3), np.uint8)
-    sat_mask = cv2.morphologyEx(sat_mask, cv2.MORPH_CLOSE, kernel)
-    contours, _ = cv2.findContours(sat_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    for cnt in contours:
-        area = cv2.contourArea(cnt)
-        if min_area < area < max_area:
-            x, y, w, h = cv2.boundingRect(cnt)
-            add_element(x, y, w, h)
+    if saturation_threshold > 0:
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        saturation = hsv[:, :, 1]
+        _, sat_mask = cv2.threshold(saturation, saturation_threshold, 255, cv2.THRESH_BINARY)
+        kernel = np.ones((3, 3), np.uint8)
+        sat_mask = cv2.morphologyEx(sat_mask, cv2.MORPH_CLOSE, kernel)
+        contours, _ = cv2.findContours(sat_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if min_area < area < max_area:
+                x, y, w, h = cv2.boundingRect(cnt)
+                add_element(x, y, w, h)
     
     return elements
 
