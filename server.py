@@ -29,6 +29,39 @@ from pathlib import Path
 os.environ["CUDA_VISIBLE_DEVICES"] = os.environ.get("CUDA_VISIBLE_DEVICES", "")
 os.environ["FLAGS_use_mkldnn"] = "0"
 
+# 自动配置 NVIDIA 库路径（cuDNN, cuBLAS 等）
+def setup_nvidia_paths():
+    """自动将 NVIDIA DLL 路径添加到 PATH"""
+    nvidia_libs = [
+        ("nvidia.cudnn", "cuDNN"),
+        ("nvidia.cublas", "cuBLAS"),
+        ("nvidia.cuda_nvrtc", "NVRTC"),
+    ]
+    
+    added_paths = []
+    for module_name, lib_name in nvidia_libs:
+        try:
+            module = __import__(module_name, fromlist=[''])
+            lib_bin = Path(module.__path__[0]) / "bin"
+            if lib_bin.exists():
+                lib_bin_str = str(lib_bin)
+                current_path = os.environ.get("PATH", "")
+                if lib_bin_str not in current_path:
+                    os.environ["PATH"] = lib_bin_str + os.pathsep + os.environ.get("PATH", "")
+                    # Windows 需要添加 DLL 搜索路径
+                    if sys.platform == "win32" and hasattr(os, "add_dll_directory"):
+                        os.add_dll_directory(lib_bin_str)
+                    added_paths.append(f"{lib_name}: {lib_bin_str}")
+        except ImportError:
+            pass  # 库未安装，跳过
+    
+    if added_paths:
+        print("已配置 NVIDIA 库路径:")
+        for p in added_paths:
+            print(f"  - {p}")
+
+setup_nvidia_paths()
+
 from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
 

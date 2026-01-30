@@ -2,7 +2,14 @@
 #
 # OCR-SoM 跨平台一键安装脚本 (Linux/macOS)
 #
-# Usage:
+# 此脚本将自动：
+# - 检测 Python 环境
+# - 检测 NVIDIA GPU
+# - 安装 PaddlePaddle (GPU/CPU 版本)
+# - 安装 cuDNN 库 (如果使用 GPU)
+# - 安装 PaddleOCR 及其他依赖
+#
+# 使用方法:
 #   chmod +x install.sh
 #   ./install.sh          # 自动检测并安装
 #   ./install.sh --cpu    # 强制使用 CPU 版本
@@ -11,20 +18,17 @@
 
 set -e
 
-MIRROR="https://pypi.tuna.tsinghua.edu.cn/simple"
-
 echo "============================================================"
-echo "  OCR-SoM Installer"
+echo "  OCR-SoM 一键安装程序 (Linux/macOS)"
 echo "============================================================"
-
-# 检测操作系统
-detect_os() {
-    case "$(uname -s)" in
-        Darwin*) echo "macos" ;;
-        Linux*)  echo "linux" ;;
-        *)       echo "unknown" ;;
-    esac
-}
+echo ""
+echo "  此脚本将自动："
+echo "  - 检测 Python 环境"
+echo "  - 检测 NVIDIA GPU"
+echo "  - 安装 PaddlePaddle (GPU/CPU 版本)"
+echo "  - 安装 cuDNN 库 (如果使用 GPU)"
+echo "  - 安装 PaddleOCR 及其他依赖"
+echo ""
 
 # 检测 Python
 detect_python() {
@@ -40,125 +44,48 @@ detect_python() {
     echo ""
 }
 
-# 检测 NVIDIA GPU
-detect_gpu() {
-    if command -v nvidia-smi &> /dev/null; then
-        nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1
-    else
-        echo ""
-    fi
-}
-
-# 检测 CUDA 版本
-detect_cuda() {
-    if command -v nvcc &> /dev/null; then
-        nvcc --version 2>/dev/null | grep -oE "release [0-9]+" | grep -oE "[0-9]+"
-    else
-        echo ""
-    fi
-}
-
-# 1. 检测环境
-echo ""
-echo "[1/4] Detecting environment..."
-
-OS=$(detect_os)
-echo "  OS: $OS"
-
 PYTHON=$(detect_python)
 if [ -z "$PYTHON" ]; then
-    echo "  Error: Python 3.9+ not found!"
-    echo "  Please install Python first:"
-    if [ "$OS" = "macos" ]; then
-        echo "    brew install python@3.11"
-    else
-        echo "    sudo apt install python3.11 python3.11-venv python3-pip"
-    fi
+    echo "[错误] 未找到 Python 3.9+！"
+    echo ""
+    echo "请先安装 Python："
+    case "$(uname -s)" in
+        Darwin*) echo "  brew install python@3.11" ;;
+        Linux*)  echo "  sudo apt install python3.11 python3.11-venv python3-pip" ;;
+    esac
     exit 1
 fi
-echo "  Python: $($PYTHON --version)"
 
-GPU=$(detect_gpu)
-CUDA=$(detect_cuda)
-if [ -n "$GPU" ]; then
-    echo "  GPU: $GPU"
-    if [ -n "$CUDA" ]; then
-        echo "  CUDA: $CUDA"
-    fi
-else
-    echo "  GPU: Not found (will use CPU)"
+echo "检测到 Python: $($PYTHON --version)"
+echo ""
+
+# 运行 Python 安装脚本
+$PYTHON install.py "$@"
+
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "============================================================"
+    echo "  安装失败！"
+    echo "============================================================"
+    echo ""
+    echo "  可能的解决方法："
+    echo "  1. 确保 Python 版本为 3.9-3.12"
+    echo "  2. 尝试使用 CPU 版本: ./install.sh --cpu"
+    echo "  3. 检查网络连接"
+    exit 1
 fi
-
-# 2. 决定安装版本
-echo ""
-echo "[2/4] Determining installation type..."
-
-USE_GPU=false
-CUDA_VER=""
-
-if [[ "$1" == "--cpu" ]]; then
-    echo "  Mode: CPU (forced by --cpu)"
-elif [[ "$1" == "--gpu" ]]; then
-    if [ -n "$GPU" ] && [ -n "$CUDA" ]; then
-        USE_GPU=true
-        CUDA_VER=$CUDA
-        echo "  Mode: GPU (CUDA $CUDA_VER)"
-    else
-        echo "  Warning: --gpu specified but no CUDA found, falling back to CPU"
-    fi
-elif [ -n "$GPU" ] && [ -n "$CUDA" ]; then
-    USE_GPU=true
-    CUDA_VER=$CUDA
-    echo "  Mode: GPU (auto-detected CUDA $CUDA_VER)"
-else
-    echo "  Mode: CPU (no GPU detected)"
-fi
-
-# 3. 安装 PaddlePaddle
-echo ""
-echo "[3/4] Installing PaddlePaddle..."
-
-if [ "$USE_GPU" = true ]; then
-    if [ "$CUDA_VER" = "12" ]; then
-        PADDLE_PKG="paddlepaddle-gpu==2.6.2.post120"
-    else
-        PADDLE_PKG="paddlepaddle-gpu==2.6.2.post116"
-    fi
-    echo "  Installing GPU version (CUDA $CUDA_VER)..."
-else
-    PADDLE_PKG="paddlepaddle==2.6.2"
-    echo "  Installing CPU version..."
-fi
-
-$PYTHON -m pip install $PADDLE_PKG -i $MIRROR -q
-
-# 4. 安装其他依赖
-echo ""
-echo "[4/4] Installing dependencies..."
-
-$PYTHON -m pip install \
-    paddleocr==2.7.3 \
-    "numpy<2" \
-    opencv-python-headless \
-    Pillow \
-    flask \
-    flask-cors \
-    -i $MIRROR -q
-
-# 验证安装
-echo ""
-echo "============================================================"
-echo "  Verifying installation..."
-
-$PYTHON -c "import paddle; print(f'  PaddlePaddle: {paddle.__version__}')" 2>/dev/null || true
-$PYTHON -c "from paddleocr import PaddleOCR; print('  PaddleOCR: OK')" 2>/dev/null || true
 
 echo ""
 echo "============================================================"
-echo "  Installation complete!"
+echo "  快速开始"
 echo "============================================================"
 echo ""
-echo "Usage:"
-echo "  $PYTHON ocr_som.py <image>        # CLI mode"
-echo "  $PYTHON server.py                  # Start API server"
-echo "  $PYTHON server.py --port 8080     # Custom port"
+echo "  启动服务器："
+echo "    $PYTHON server.py"
+echo ""
+echo "  然后打开浏览器访问："
+echo "    http://127.0.0.1:5000"
+echo ""
+echo "  命令行参数："
+echo "    --cpu    强制使用 CPU 版本"
+echo "    --gpu    强制使用 GPU 版本"
