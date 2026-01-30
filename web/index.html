@@ -248,34 +248,68 @@
             border-radius: 4px;
         }
         
-        /* 聚焦遮罩 */
-        .focus-overlay {
+        /* 聚光灯遮罩 - 用 SVG 实现镂空效果 */
+        .spotlight-overlay {
             position: absolute;
             top: 0;
             left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
+            width: 100%;
+            height: 100%;
             pointer-events: none;
+            z-index: 5;
             opacity: 0;
             transition: opacity 0.3s;
-            z-index: 5;
         }
-        .focus-overlay.active { opacity: 1; }
+        .spotlight-overlay.active { opacity: 1; }
         
-        /* 高亮框 */
+        /* 高亮框边框 */
         .highlight-box {
             position: absolute;
             border: 3px solid #00ff88;
-            background: transparent;
             border-radius: 4px;
             pointer-events: none;
             z-index: 10;
-            box-shadow: 0 0 20px rgba(0, 255, 136, 0.5), 0 0 40px rgba(0, 255, 136, 0.3);
+            box-shadow: 0 0 20px rgba(0, 255, 136, 0.8), 0 0 40px rgba(0, 255, 136, 0.4);
             opacity: 0;
-            transition: opacity 0.3s;
+            transition: all 0.3s;
         }
-        .highlight-box.active { opacity: 1; }
+        .highlight-box.active { 
+            opacity: 1;
+            animation: pulse-glow 1.5s ease-in-out;
+        }
+        
+        /* 脉冲动画 */
+        @keyframes pulse-glow {
+            0% { 
+                box-shadow: 0 0 20px rgba(0, 255, 136, 0.8), 0 0 40px rgba(0, 255, 136, 0.4);
+                transform: scale(1);
+            }
+            50% { 
+                box-shadow: 0 0 40px rgba(0, 255, 136, 1), 0 0 80px rgba(0, 255, 136, 0.6);
+                transform: scale(1.02);
+            }
+            100% { 
+                box-shadow: 0 0 20px rgba(0, 255, 136, 0.8), 0 0 40px rgba(0, 255, 136, 0.4);
+                transform: scale(1);
+            }
+        }
+        
+        /* 引导箭头动画 */
+        .guide-arrow {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            pointer-events: none;
+            z-index: 15;
+            opacity: 0;
+        }
+        .guide-arrow.active {
+            animation: arrow-guide 0.6s ease-out forwards;
+        }
+        @keyframes arrow-guide {
+            0% { opacity: 1; transform: translate(-50px, -50px) scale(1.5); }
+            100% { opacity: 0; transform: translate(0, 0) scale(1); }
+        }
         
         /* 缩放提示 */
         .zoom-indicator {
@@ -335,10 +369,23 @@
                 <button class="viewer-btn" id="resetBtn" title="重置">↺</button>
             </div>
             <div class="viewer-container" id="viewerContainer">
-                <div class="focus-overlay" id="focusOverlay"></div>
+                <svg class="spotlight-overlay" id="spotlightOverlay">
+                    <defs>
+                        <mask id="spotlightMask">
+                            <rect width="100%" height="100%" fill="white"/>
+                            <rect id="spotlightHole" fill="black" rx="4"/>
+                        </mask>
+                    </defs>
+                    <rect width="100%" height="100%" fill="rgba(0,0,0,0.75)" mask="url(#spotlightMask)"/>
+                </svg>
                 <div class="viewer-canvas" id="viewerCanvas">
                     <img class="viewer-img" id="resultImg">
                     <div class="highlight-box" id="highlightBox"></div>
+                    <div class="guide-arrow" id="guideArrow">
+                        <svg viewBox="0 0 30 30" fill="none">
+                            <path d="M5 25 L25 5 M25 5 L15 5 M25 5 L25 15" stroke="#00ff88" stroke-width="3" stroke-linecap="round"/>
+                        </svg>
+                    </div>
                 </div>
             </div>
             <div class="zoom-indicator" id="zoomIndicator">100%</div>
@@ -360,7 +407,9 @@
         const viewerContainer = document.getElementById('viewerContainer');
         const viewerCanvas = document.getElementById('viewerCanvas');
         const highlightBox = document.getElementById('highlightBox');
-        const focusOverlay = document.getElementById('focusOverlay');
+        const spotlightOverlay = document.getElementById('spotlightOverlay');
+        const spotlightHole = document.getElementById('spotlightHole');
+        const guideArrow = document.getElementById('guideArrow');
         const zoomIndicator = document.getElementById('zoomIndicator');
         const zoomInBtn = document.getElementById('zoomInBtn');
         const zoomOutBtn = document.getElementById('zoomOutBtn');
@@ -532,21 +581,53 @@
         function showHighlight(box) {
             const [x1, y1, x2, y2] = box;
             const displayWidth = resultImg.width;
+            const displayHeight = resultImg.height;
             const scaleRatio = displayWidth / imgNaturalWidth;
             
-            highlightBox.style.left = (x1 * scaleRatio) + 'px';
-            highlightBox.style.top = (y1 * scaleRatio) + 'px';
-            highlightBox.style.width = ((x2 - x1) * scaleRatio) + 'px';
-            highlightBox.style.height = ((y2 - y1) * scaleRatio) + 'px';
+            // 计算高亮区域位置
+            const hx = x1 * scaleRatio;
+            const hy = y1 * scaleRatio;
+            const hw = (x2 - x1) * scaleRatio;
+            const hh = (y2 - y1) * scaleRatio;
             
-            // 显示聚焦效果
+            // 高亮框
+            highlightBox.style.left = hx + 'px';
+            highlightBox.style.top = hy + 'px';
+            highlightBox.style.width = hw + 'px';
+            highlightBox.style.height = hh + 'px';
+            
+            // 聚光灯遮罩（SVG 镂空效果）
+            // 需要考虑 canvas 的 transform
+            const canvasRect = viewerCanvas.getBoundingClientRect();
+            const containerRect = viewerContainer.getBoundingClientRect();
+            const offsetX = canvasRect.left - containerRect.left;
+            const offsetY = canvasRect.top - containerRect.top;
+            
+            spotlightHole.setAttribute('x', offsetX + hx * scale);
+            spotlightHole.setAttribute('y', offsetY + hy * scale);
+            spotlightHole.setAttribute('width', hw * scale);
+            spotlightHole.setAttribute('height', hh * scale);
+            
+            // 引导箭头
+            guideArrow.style.left = hx + 'px';
+            guideArrow.style.top = hy + 'px';
+            
+            // 触发动画
+            highlightBox.classList.remove('active');
+            guideArrow.classList.remove('active');
+            spotlightOverlay.classList.remove('active');
+            
+            // 强制重绘以重新触发动画
+            void highlightBox.offsetWidth;
+            
             highlightBox.classList.add('active');
-            focusOverlay.classList.add('active');
+            guideArrow.classList.add('active');
+            spotlightOverlay.classList.add('active');
             
-            // 2秒后自动取消
+            // 2秒后遮罩消失
             clearTimeout(focusTimeout);
             focusTimeout = setTimeout(() => {
-                focusOverlay.classList.remove('active');
+                spotlightOverlay.classList.remove('active');
             }, 2000);
         }
         
@@ -575,7 +656,8 @@
         function resetView() {
             fitToScreen();
             highlightBox.classList.remove('active');
-            focusOverlay.classList.remove('active');
+            spotlightOverlay.classList.remove('active');
+            guideArrow.classList.remove('active');
             elementList.querySelectorAll('.element-item').forEach(i => i.classList.remove('active'));
         }
         
