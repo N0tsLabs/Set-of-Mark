@@ -402,9 +402,17 @@
             pointer-events: none;
             z-index: 5;
             opacity: 0;
-            transition: opacity 0.3s;
+            transition: opacity 0.2s;
         }
         .spotlight-overlay.active { opacity: 1; }
+        
+        /* 聚光灯镂空动画 - 从全屏缩小到目标 */
+        #spotlightHole {
+            transition: x 0.4s cubic-bezier(0.34, 1.56, 0.64, 1),
+                        y 0.4s cubic-bezier(0.34, 1.56, 0.64, 1),
+                        width 0.4s cubic-bezier(0.34, 1.56, 0.64, 1),
+                        height 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
         
         /* 高亮框边框 */
         .highlight-box {
@@ -991,13 +999,16 @@
             // 需要考虑 canvas 的 transform
             const canvasRect = viewerCanvas.getBoundingClientRect();
             const containerRect = viewerContainer.getBoundingClientRect();
+            const containerWidth = containerRect.width;
+            const containerHeight = containerRect.height;
             const offsetX = canvasRect.left - containerRect.left;
             const offsetY = canvasRect.top - containerRect.top;
             
-            spotlightHole.setAttribute('x', offsetX + hx * scale);
-            spotlightHole.setAttribute('y', offsetY + hy * scale);
-            spotlightHole.setAttribute('width', hw * scale);
-            spotlightHole.setAttribute('height', hh * scale);
+            // 目标位置
+            const targetX = offsetX + hx * scale;
+            const targetY = offsetY + hy * scale;
+            const targetW = hw * scale;
+            const targetH = hh * scale;
             
             // 引导箭头
             guideArrow.style.left = hx + 'px';
@@ -1008,18 +1019,37 @@
             guideArrow.classList.remove('active');
             spotlightOverlay.classList.remove('active');
             
-            // 强制重绘以重新触发动画
-            void highlightBox.offsetWidth;
+            // 1. 先禁用 transition，瞬间设置为全屏（镂空覆盖整个容器 = 全亮）
+            spotlightHole.style.transition = 'none';
+            spotlightHole.setAttribute('x', -50);
+            spotlightHole.setAttribute('y', -50);
+            spotlightHole.setAttribute('width', containerWidth + 100);
+            spotlightHole.setAttribute('height', containerHeight + 100);
             
-            highlightBox.classList.add('active');
-            guideArrow.classList.add('active');
+            // 强制重绘
+            void spotlightHole.getBBox();
+            
+            // 2. 显示遮罩层
             spotlightOverlay.classList.add('active');
+            highlightBox.classList.add('active');
+            
+            // 3. 恢复 transition，动画缩小到目标位置
+            requestAnimationFrame(() => {
+                spotlightHole.style.transition = '';
+                spotlightHole.setAttribute('x', targetX);
+                spotlightHole.setAttribute('y', targetY);
+                spotlightHole.setAttribute('width', targetW);
+                spotlightHole.setAttribute('height', targetH);
+                
+                // 箭头延迟显示
+                setTimeout(() => guideArrow.classList.add('active'), 200);
+            });
             
             // 2秒后遮罩消失
             clearTimeout(focusTimeout);
             focusTimeout = setTimeout(() => {
                 spotlightOverlay.classList.remove('active');
-            }, 2000);
+            }, 2500);
         }
         
         // 适应屏幕
