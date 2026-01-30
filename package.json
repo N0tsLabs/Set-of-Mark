@@ -1,0 +1,23 @@
+{
+  "name": "ocr-som",
+  "version": "1.0.0",
+  "description": "PaddleOCR + Set-of-Mark visual automation tool",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "scripts": {
+    "install-deps": "node -e \"import('./index.js').then(m => m.installDeps())\"",
+    "test": "node test.js"
+  },
+  "keywords": [
+    "ocr",
+    "paddleocr",
+    "automation",
+    "som",
+    "visual"
+  ],
+  "author": "",
+  "license": "MIT"
+}
