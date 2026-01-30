@@ -657,8 +657,8 @@
         let imgNaturalHeight = 0;
         let focusTimeout = null;
         
-        // 设置选项
-        let settings = {
+        // 设置选项（从 localStorage 读取，否则使用默认值）
+        const defaultSettings = {
             ocr_only: false,
             detect_contours: true,
             min_area: 200,
@@ -667,6 +667,17 @@
             fill_ratio: 0.3,
             saturation_threshold: 40,
         };
+        let settings = { ...defaultSettings };
+        try {
+            const saved = localStorage.getItem('ocr-som-settings');
+            if (saved) settings = { ...defaultSettings, ...JSON.parse(saved) };
+        } catch (e) {}
+        
+        function saveSettings() {
+            try {
+                localStorage.setItem('ocr-som-settings', JSON.stringify(settings));
+            } catch (e) {}
+        }
         
         // 设置元素
         const settingsBtn = document.getElementById('settingsBtn');
@@ -737,7 +748,7 @@
         });
         
         // 预设
-        function applyPreset(preset) {
+        function applyPreset(preset, save = true) {
             const presets = {
                 default: { ocr_only: false, detect_contours: true, min_area: 200, max_area: 80000, min_size: 16, fill_ratio: 0.3, saturation_threshold: 40 },
                 fast: { ocr_only: true, detect_contours: false, min_area: 200, max_area: 80000, min_size: 16, fill_ratio: 0.3, saturation_threshold: 40 },
@@ -746,6 +757,7 @@
             };
             settings = { ...presets[preset] };
             updateSettingsUI();
+            if (save) saveSettings();  // 预设也保存
         }
         
         function updateSettingsUI() {
@@ -768,12 +780,16 @@
         
         settingsReset.addEventListener('click', () => applyPreset('default'));
         settingsApply.addEventListener('click', () => {
+            saveSettings();  // 保存到 localStorage
             closeSettings();
             // 如果已有结果，提示重新上传
             if (!resultPage.classList.contains('hidden')) {
                 alert('设置已保存，重新上传图片后生效');
             }
         });
+        
+        // 初始化：从 localStorage 恢复设置
+        updateSettingsUI();
         
         // 获取设备信息
         fetch('/info').then(r => r.json()).then(data => {
