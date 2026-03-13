@@ -152,17 +152,73 @@
             border-radius: 50%;
             cursor: pointer;
         }
-        .settings-checkbox {
+        
+        /* 模式选择卡片 */
+        .mode-cards {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .mode-card {
+            padding: 16px;
+            border: 2px solid #eee;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
             display: flex;
             align-items: center;
-            gap: 10px;
-            cursor: pointer;
+            gap: 12px;
         }
-        .settings-checkbox input {
-            width: 18px;
-            height: 18px;
-            cursor: pointer;
+        .mode-card:hover { border-color: #ccc; }
+        .mode-card.active {
+            border-color: #222;
+            background: #fafafa;
         }
+        .mode-card-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            background: #f5f5f5;
+        }
+        .mode-card.active .mode-card-icon { background: #222; color: #fff; }
+        .mode-card-info { flex: 1; }
+        .mode-card-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 2px;
+        }
+        .mode-card-desc {
+            font-size: 12px;
+            color: #999;
+        }
+        .mode-card-check {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #ddd;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        .mode-card.active .mode-card-check {
+            border-color: #222;
+            background: #222;
+            color: #fff;
+        }
+        .mode-card-check::after {
+            content: '✓';
+            font-size: 12px;
+            opacity: 0;
+        }
+        .mode-card.active .mode-card-check::after { opacity: 1; }
+        
         .settings-footer {
             padding: 16px 20px;
             border-top: 1px solid #eee;
@@ -263,6 +319,11 @@
             white-space: nowrap;
         }
         .panel-btn:hover { background: #eee; }
+        .panel-btn.primary {
+            background: #222;
+            color: #fff;
+        }
+        .panel-btn.primary:hover { background: #444; }
         
         /* 搜索框 */
         .search-box {
@@ -488,31 +549,81 @@
     <div class="settings-overlay" id="settingsOverlay"></div>
     <div class="settings-panel" id="settingsPanel">
         <div class="settings-header">
-            <span class="settings-title">参数设置</span>
+            <span class="settings-title">识别设置</span>
             <button class="settings-close" id="settingsClose">×</button>
         </div>
         <div class="settings-body">
+            <!-- 模式选择 -->
             <div class="settings-section">
                 <div class="settings-section-title">识别模式</div>
-                <div class="settings-item">
-                    <label class="settings-checkbox">
-                        <input type="checkbox" id="optOcrOnly">
-                        <span>仅 OCR（不检测轮廓，速度更快）</span>
-                    </label>
-                </div>
-                <div class="settings-item">
-                    <label class="settings-checkbox">
-                        <input type="checkbox" id="optDetectContours" checked>
-                        <span>检测 UI 轮廓（图标、按钮等）</span>
-                    </label>
+                <div class="mode-cards">
+                    <div class="mode-card" data-mode="mixed" id="modeMixed">
+                        <div class="mode-card-icon">🔍</div>
+                        <div class="mode-card-info">
+                            <div class="mode-card-title">混合模式</div>
+                            <div class="mode-card-desc">OCR + OpenCV 轮廓检测（推荐）</div>
+                        </div>
+                        <div class="mode-card-check"></div>
+                    </div>
+                    <div class="mode-card" data-mode="ocr" id="modeOcr">
+                        <div class="mode-card-icon">📝</div>
+                        <div class="mode-card-info">
+                            <div class="mode-card-title">OCR 模式</div>
+                            <div class="mode-card-desc">仅识别文字，速度最快</div>
+                        </div>
+                        <div class="mode-card-check"></div>
+                    </div>
+                    <div class="mode-card" data-mode="opencv" id="modeOpencv">
+                        <div class="mode-card-icon">🎯</div>
+                        <div class="mode-card-info">
+                            <div class="mode-card-title">OpenCV 模式</div>
+                            <div class="mode-card-desc">仅检测 UI 轮廓，无文字识别</div>
+                        </div>
+                        <div class="mode-card-check"></div>
+                    </div>
                 </div>
             </div>
             
-            <div class="settings-section" id="contourSettings">
-                <div class="settings-section-title">轮廓检测参数</div>
-                <div style="font-size: 12px; color: #888; margin-bottom: 12px; padding: 8px; background: #f8f8f8; border-radius: 4px;">
-                    💡 这些参数只影响红框（UI轮廓），不影响蓝框（OCR文字）。修改后需重新上传图片。
+            <!-- OCR 参数 -->
+            <div class="settings-section" id="ocrSettings">
+                <div class="settings-section-title">OCR 参数</div>
+                <div class="settings-item">
+                    <div class="settings-label">
+                        <span class="settings-label-text">检测阈值 (thresh)</span>
+                        <span class="settings-label-value" id="valOcrThresh">0.2</span>
+                    </div>
+                    <input type="range" class="settings-range" id="optOcrThresh" min="0.1" max="0.5" step="0.05" value="0.2">
+                    <div style="font-size: 11px; color: #999; margin-top: 2px;">二值化阈值，调小可检测更多文字</div>
                 </div>
+                <div class="settings-item">
+                    <div class="settings-label">
+                        <span class="settings-label-text">框置信度阈值 (box_thresh)</span>
+                        <span class="settings-label-value" id="valBoxThresh">0.3</span>
+                    </div>
+                    <input type="range" class="settings-range" id="optBoxThresh" min="0.1" max="0.7" step="0.05" value="0.3">
+                    <div style="font-size: 11px; color: #999; margin-top: 2px;">调小保留更多检测框，调大过滤低置信度</div>
+                </div>
+                <div class="settings-item">
+                    <div class="settings-label">
+                        <span class="settings-label-text">文字框扩展比例</span>
+                        <span class="settings-label-value" id="valUnclipRatio">1.8</span>
+                    </div>
+                    <input type="range" class="settings-range" id="optUnclipRatio" min="1.2" max="3.0" step="0.1" value="1.8">
+                    <div style="font-size: 11px; color: #999; margin-top: 2px;">调大扩展文字框边界，调小更紧凑</div>
+                </div>
+                <div class="settings-item">
+                    <div class="settings-label">
+                        <span class="settings-label-text">最小文字尺寸</span>
+                        <span class="settings-label-value" id="valMinTextSize">3</span>
+                    </div>
+                    <input type="range" class="settings-range" id="optMinTextSize" min="1" max="10" value="3">
+                    <div style="font-size: 11px; color: #999; margin-top: 2px;">过滤小于此尺寸的文字（像素）</div>
+                </div>
+            </div>
+            
+            <!-- OpenCV 参数 -->
+            <div class="settings-section" id="opencvSettings">
+                <div class="settings-section-title">OpenCV 轮廓参数</div>
                 <div class="settings-item">
                     <div class="settings-label">
                         <span class="settings-label-text">最小面积</span>
@@ -554,19 +665,9 @@
                     <div style="font-size: 11px; color: #999; margin-top: 2px;">调小 → 也检测灰色元素；设为0 → 禁用彩色检测</div>
                 </div>
             </div>
-            
-            <div class="settings-section">
-                <div class="settings-section-title">预设</div>
-                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                    <button class="settings-footer-btn secondary" onclick="applyPreset('default')">默认</button>
-                    <button class="settings-footer-btn secondary" onclick="applyPreset('fast')">快速</button>
-                    <button class="settings-footer-btn secondary" onclick="applyPreset('detailed')">详细</button>
-                    <button class="settings-footer-btn secondary" onclick="applyPreset('ocrOnly')">纯 OCR</button>
-                </div>
-            </div>
         </div>
         <div class="settings-footer">
-            <button class="settings-footer-btn secondary" id="settingsReset">重置默认</button>
+            <button class="settings-footer-btn secondary" id="settingsReset">恢复默认</button>
             <button class="settings-footer-btn primary" id="settingsApply">应用</button>
         </div>
     </div>
@@ -602,7 +703,8 @@
                     <div class="panel-actions">
                         <button class="panel-btn" id="downloadBtn">💾 下载</button>
                         <button class="panel-btn" id="settingsBtn2">⚙️ 设置</button>
-                        <button class="panel-btn" id="newUploadBtn">重新上传</button>
+                        <button class="panel-btn primary" id="reprocessBtn">🔄 重新识别</button>
+                        <button class="panel-btn" id="newUploadBtn">新图片</button>
                     </div>
                 </div>
                 <div class="search-box">
@@ -651,6 +753,7 @@
         const resultPage = document.getElementById('resultPage');
         const uploadBtn = document.getElementById('uploadBtn');
         const newUploadBtn = document.getElementById('newUploadBtn');
+        const reprocessBtn = document.getElementById('reprocessBtn');
         const fileInput = document.getElementById('fileInput');
         const deviceInfo = document.getElementById('deviceInfo');
         const stats = document.getElementById('stats');
@@ -672,6 +775,7 @@
         
         // 状态
         let currentElements = [];
+        let currentFile = null;  // 保存当前文件用于重新识别
         let scale = 1;
         let translateX = 0;
         let translateY = 0;
@@ -683,8 +787,13 @@
         
         // 设置选项（从 localStorage 读取，否则使用默认值）
         const defaultSettings = {
-            ocr_only: false,
-            detect_contours: true,
+            mode: 'mixed',  // 'mixed', 'ocr', 'opencv'
+            // OCR 参数
+            ocr_thresh: 0.2,          // 检测阈值 (det_db_thresh)
+            box_thresh: 0.3,          // 框置信度阈值 (det_db_box_thresh)
+            unclip_ratio: 1.8,        // 文字框扩展比例 (det_db_unclip_ratio)
+            min_text_size: 3,         // 最小文字尺寸
+            // OpenCV 参数
             min_area: 200,
             max_area: 80000,
             min_size: 16,
@@ -703,7 +812,7 @@
             } catch (e) {}
         }
         
-        // 设置元素
+        // 设置面板元素
         const settingsBtn = document.getElementById('settingsBtn');
         const settingsPanel = document.getElementById('settingsPanel');
         const settingsOverlay = document.getElementById('settingsOverlay');
@@ -711,10 +820,16 @@
         const settingsReset = document.getElementById('settingsReset');
         const settingsApply = document.getElementById('settingsApply');
         
+        // 模式卡片
+        const modeCards = document.querySelectorAll('.mode-card');
+        const ocrSettings = document.getElementById('ocrSettings');
+        const opencvSettings = document.getElementById('opencvSettings');
+        
         // 设置面板开关
         function openSettings() {
             settingsPanel.classList.add('open');
             settingsOverlay.classList.add('open');
+            updateSettingsUI();
         }
         function closeSettings() {
             settingsPanel.classList.remove('open');
@@ -725,8 +840,39 @@
         settingsClose.addEventListener('click', closeSettings);
         settingsOverlay.addEventListener('click', closeSettings);
         
+        // 模式选择
+        modeCards.forEach(card => {
+            card.addEventListener('click', () => {
+                const mode = card.dataset.mode;
+                settings.mode = mode;
+                updateModeUI();
+            });
+        });
+        
+        function updateModeUI() {
+            modeCards.forEach(card => {
+                card.classList.toggle('active', card.dataset.mode === settings.mode);
+            });
+            
+            // 根据模式显示/隐藏参数
+            if (settings.mode === 'mixed') {
+                ocrSettings.style.display = 'block';
+                opencvSettings.style.display = 'block';
+            } else if (settings.mode === 'ocr') {
+                ocrSettings.style.display = 'block';
+                opencvSettings.style.display = 'none';
+            } else if (settings.mode === 'opencv') {
+                ocrSettings.style.display = 'none';
+                opencvSettings.style.display = 'block';
+            }
+        }
+        
         // 设置滑块值显示
         const rangeInputs = [
+            { id: 'optOcrThresh', valId: 'valOcrThresh', key: 'ocr_thresh' },
+            { id: 'optBoxThresh', valId: 'valBoxThresh', key: 'box_thresh' },
+            { id: 'optUnclipRatio', valId: 'valUnclipRatio', key: 'unclip_ratio' },
+            { id: 'optMinTextSize', valId: 'valMinTextSize', key: 'min_text_size' },
             { id: 'optMinArea', valId: 'valMinArea', key: 'min_area' },
             { id: 'optMaxArea', valId: 'valMaxArea', key: 'max_area' },
             { id: 'optMinSize', valId: 'valMinSize', key: 'min_size' },
@@ -743,50 +889,18 @@
             });
         });
         
-        // OCR Only 和 轮廓检测互斥
-        const optOcrOnly = document.getElementById('optOcrOnly');
-        const optDetectContours = document.getElementById('optDetectContours');
-        const contourSettings = document.getElementById('contourSettings');
-        
-        optOcrOnly.addEventListener('change', () => {
-            settings.ocr_only = optOcrOnly.checked;
-            if (optOcrOnly.checked) {
-                optDetectContours.checked = false;
-                settings.detect_contours = false;
-                contourSettings.style.opacity = '0.5';
-                contourSettings.style.pointerEvents = 'none';
-            }
-        });
-        
-        optDetectContours.addEventListener('change', () => {
-            settings.detect_contours = optDetectContours.checked;
-            if (optDetectContours.checked) {
-                optOcrOnly.checked = false;
-                settings.ocr_only = false;
-                contourSettings.style.opacity = '1';
-                contourSettings.style.pointerEvents = 'auto';
-            } else {
-                contourSettings.style.opacity = '0.5';
-                contourSettings.style.pointerEvents = 'none';
-            }
-        });
-        
-        // 预设
-        function applyPreset(preset, save = true) {
-            const presets = {
-                default: { ocr_only: false, detect_contours: true, min_area: 200, max_area: 80000, min_size: 16, fill_ratio: 0.3, saturation_threshold: 40 },
-                fast: { ocr_only: true, detect_contours: false, min_area: 200, max_area: 80000, min_size: 16, fill_ratio: 0.3, saturation_threshold: 40 },
-                detailed: { ocr_only: false, detect_contours: true, min_area: 100, max_area: 150000, min_size: 12, fill_ratio: 0.2, saturation_threshold: 30 },
-                ocrOnly: { ocr_only: true, detect_contours: false, min_area: 200, max_area: 80000, min_size: 16, fill_ratio: 0.3, saturation_threshold: 40 },
-            };
-            settings = { ...presets[preset] };
-            updateSettingsUI();
-            if (save) saveSettings();  // 预设也保存
-        }
-        
         function updateSettingsUI() {
-            optOcrOnly.checked = settings.ocr_only;
-            optDetectContours.checked = settings.detect_contours;
+            updateModeUI();
+            // OCR 参数
+            document.getElementById('optOcrThresh').value = settings.ocr_thresh;
+            document.getElementById('valOcrThresh').textContent = settings.ocr_thresh;
+            document.getElementById('optBoxThresh').value = settings.box_thresh;
+            document.getElementById('valBoxThresh').textContent = settings.box_thresh;
+            document.getElementById('optUnclipRatio').value = settings.unclip_ratio;
+            document.getElementById('valUnclipRatio').textContent = settings.unclip_ratio;
+            document.getElementById('optMinTextSize').value = settings.min_text_size;
+            document.getElementById('valMinTextSize').textContent = settings.min_text_size;
+            // OpenCV 参数
             document.getElementById('optMinArea').value = settings.min_area;
             document.getElementById('valMinArea').textContent = settings.min_area;
             document.getElementById('optMaxArea').value = settings.max_area;
@@ -797,22 +911,19 @@
             document.getElementById('valFillRatio').textContent = settings.fill_ratio;
             document.getElementById('optSaturation').value = settings.saturation_threshold;
             document.getElementById('valSaturation').textContent = settings.saturation_threshold;
-            
-            contourSettings.style.opacity = settings.detect_contours ? '1' : '0.5';
-            contourSettings.style.pointerEvents = settings.detect_contours ? 'auto' : 'none';
         }
         
-        settingsReset.addEventListener('click', () => applyPreset('default'));
-        settingsApply.addEventListener('click', () => {
-            saveSettings();  // 保存到 localStorage
-            closeSettings();
-            // 如果已有结果，提示重新上传
-            if (!resultPage.classList.contains('hidden')) {
-                alert('设置已保存，重新上传图片后生效');
-            }
+        settingsReset.addEventListener('click', () => {
+            settings = { ...defaultSettings };
+            updateSettingsUI();
         });
         
-        // 初始化：从 localStorage 恢复设置
+        settingsApply.addEventListener('click', () => {
+            saveSettings();
+            closeSettings();
+        });
+        
+        // 初始化
         updateSettingsUI();
         
         // 获取设备信息
@@ -822,12 +933,23 @@
         
         // 上传按钮
         uploadBtn.addEventListener('click', () => {
-            fileInput.value = '';  // 清空，允许选择同一文件
-            fileInput.click();
-        });
-        newUploadBtn.addEventListener('click', () => {
             fileInput.value = '';
             fileInput.click();
+        });
+        
+        newUploadBtn.addEventListener('click', () => {
+            currentFile = null;
+            fileInput.value = '';
+            fileInput.click();
+        });
+        
+        // 重新识别按钮
+        reprocessBtn.addEventListener('click', () => {
+            if (currentFile) {
+                handleFile(currentFile);
+            } else {
+                alert('无法重新识别，请重新上传图片');
+            }
         });
         
         // 下载标注图
@@ -841,7 +963,7 @@
             link.click();
         });
         
-        // 阻止浏览器默认拖拽行为（防止刷新页面）
+        // 阻止浏览器默认拖拽行为
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             window.addEventListener(eventName, e => {
                 e.preventDefault();
@@ -905,25 +1027,59 @@
         async function handleFile(file) {
             if (!file.type.startsWith('image/')) return;
             
+            // 保存文件用于重新识别
+            currentFile = file;
+            
             showPage('loading');
             searchInput.value = '';
             
             try {
                 const base64 = await fileToBase64(file);
+                
+                // 根据模式设置参数
+                const requestBody = {
+                    image: base64,
+                    return_image: true,
+                    mode: settings.mode,  // 发送模式参数
+                };
+                
+                // 添加 OCR 参数（所有涉及 OCR 的模式）
+                if (settings.mode !== 'opencv') {
+                    requestBody.det_db_thresh = settings.ocr_thresh;
+                    requestBody.det_db_box_thresh = settings.box_thresh;
+                    requestBody.det_db_unclip_ratio = settings.unclip_ratio;
+                    requestBody.min_text_size = settings.min_text_size;
+                }
+                
+                if (settings.mode === 'ocr') {
+                    // OCR 模式：仅 OCR，不检测轮廓
+                    requestBody.ocr_only = true;
+                    requestBody.detect_contours = false;
+                } else if (settings.mode === 'opencv') {
+                    // OpenCV 模式：仅轮廓，不 OCR
+                    requestBody.ocr_only = false;
+                    requestBody.detect_contours = true;
+                    requestBody.skip_ocr = true;
+                    requestBody.min_area = settings.min_area;
+                    requestBody.max_area = settings.max_area;
+                    requestBody.min_size = settings.min_size;
+                    requestBody.fill_ratio = settings.fill_ratio;
+                    requestBody.saturation_threshold = settings.saturation_threshold;
+                } else {
+                    // 混合模式
+                    requestBody.ocr_only = false;
+                    requestBody.detect_contours = true;
+                    requestBody.min_area = settings.min_area;
+                    requestBody.max_area = settings.max_area;
+                    requestBody.min_size = settings.min_size;
+                    requestBody.fill_ratio = settings.fill_ratio;
+                    requestBody.saturation_threshold = settings.saturation_threshold;
+                }
+                
                 const response = await fetch('/som', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        image: base64, 
-                        return_image: true,
-                        ocr_only: settings.ocr_only,
-                        detect_contours: settings.detect_contours,
-                        min_area: settings.min_area,
-                        max_area: settings.max_area,
-                        min_size: settings.min_size,
-                        fill_ratio: settings.fill_ratio,
-                        saturation_threshold: settings.saturation_threshold,
-                    })
+                    body: JSON.stringify(requestBody)
                 });
                 const data = await response.json();
                 
@@ -967,27 +1123,31 @@
             
             // 统计
             const textCount = data.elements.filter(e => e.type === 'text').length;
-            stats.textContent = `${data.count} 个元素，${textCount} 个文字`;
+            const uiCount = data.elements.filter(e => e.type === 'ui' || e.type === 'contour').length;
+            let statsText = `${data.count} 个元素`;
+            if (textCount > 0) statsText += `，${textCount} 个文字`;
+            if (uiCount > 0) statsText += `，${uiCount} 个 UI`;
+            stats.textContent = statsText;
             
             // 元素列表
-            elementList.innerHTML = data.elements.map((el, idx) => `
+            elementList.innerHTML = data.elements.map((el, idx) => {
+                const text = el.text || (el.type === 'ui' || el.type === 'contour' ? '[UI 元素]' : '[图标]');
+                return `
                 <div class="element-item" data-idx="${idx}" data-box="${el.box.join(',')}">
                     <span class="element-id">${el.id}</span>
                     <div class="element-info">
-                        <div class="element-text">${el.text || '[UI 元素]'}</div>
+                        <div class="element-text">${text}</div>
                         <div class="element-meta">[${el.box.join(', ')}]</div>
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
             
             // 点击元素高亮
             elementList.querySelectorAll('.element-item').forEach(item => {
                 item.addEventListener('click', () => {
-                    // 更新选中状态
                     elementList.querySelectorAll('.element-item').forEach(i => i.classList.remove('active'));
                     item.classList.add('active');
                     
-                    // 显示高亮框
                     const box = item.dataset.box.split(',').map(Number);
                     showHighlight(box);
                 });
@@ -1003,20 +1163,16 @@
             const displayHeight = resultImg.height;
             const scaleRatio = displayWidth / imgNaturalWidth;
             
-            // 计算高亮区域位置
             const hx = x1 * scaleRatio;
             const hy = y1 * scaleRatio;
             const hw = (x2 - x1) * scaleRatio;
             const hh = (y2 - y1) * scaleRatio;
             
-            // 高亮框
             highlightBox.style.left = hx + 'px';
             highlightBox.style.top = hy + 'px';
             highlightBox.style.width = hw + 'px';
             highlightBox.style.height = hh + 'px';
             
-            // 聚光灯遮罩（SVG 镂空效果）
-            // 需要考虑 canvas 的 transform
             const canvasRect = viewerCanvas.getBoundingClientRect();
             const containerRect = viewerContainer.getBoundingClientRect();
             const containerWidth = containerRect.width;
@@ -1024,36 +1180,29 @@
             const offsetX = canvasRect.left - containerRect.left;
             const offsetY = canvasRect.top - containerRect.top;
             
-            // 目标位置
             const targetX = offsetX + hx * scale;
             const targetY = offsetY + hy * scale;
             const targetW = hw * scale;
             const targetH = hh * scale;
             
-            // 引导箭头
             guideArrow.style.left = hx + 'px';
             guideArrow.style.top = hy + 'px';
             
-            // 触发动画
             highlightBox.classList.remove('active');
             guideArrow.classList.remove('active');
             spotlightOverlay.classList.remove('active');
             
-            // 1. 先禁用 transition，瞬间设置为全屏（镂空覆盖整个容器 = 全亮）
             spotlightHole.style.transition = 'none';
             spotlightHole.setAttribute('x', -50);
             spotlightHole.setAttribute('y', -50);
             spotlightHole.setAttribute('width', containerWidth + 100);
             spotlightHole.setAttribute('height', containerHeight + 100);
             
-            // 强制重绘
             void spotlightHole.getBBox();
             
-            // 2. 显示遮罩层
             spotlightOverlay.classList.add('active');
             highlightBox.classList.add('active');
             
-            // 3. 恢复 transition，动画缩小到目标位置
             requestAnimationFrame(() => {
                 spotlightHole.style.transition = '';
                 spotlightHole.setAttribute('x', targetX);
@@ -1061,18 +1210,15 @@
                 spotlightHole.setAttribute('width', targetW);
                 spotlightHole.setAttribute('height', targetH);
                 
-                // 箭头延迟显示
                 setTimeout(() => guideArrow.classList.add('active'), 200);
             });
             
-            // 2秒后遮罩消失
             clearTimeout(focusTimeout);
             focusTimeout = setTimeout(() => {
                 spotlightOverlay.classList.remove('active');
             }, 2500);
         }
         
-        // 适应屏幕
         function fitToScreen() {
             const containerRect = viewerContainer.getBoundingClientRect();
             const padding = 40;
@@ -1088,7 +1234,6 @@
             updateTransform();
         }
         
-        // 缩放控制
         function updateTransform() {
             viewerCanvas.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
             zoomIndicator.textContent = Math.round(scale * 100) + '%';
@@ -1114,7 +1259,6 @@
         
         resetBtn.addEventListener('click', resetView);
         
-        // 滚轮缩放
         viewerContainer.addEventListener('wheel', e => {
             e.preventDefault();
             const delta = e.deltaY > 0 ? 0.9 : 1.1;
@@ -1122,7 +1266,6 @@
             updateTransform();
         });
         
-        // 拖动
         viewerContainer.addEventListener('mousedown', e => {
             isDragging = true;
             startX = e.clientX - translateX;

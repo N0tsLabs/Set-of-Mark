@@ -91,9 +91,9 @@ def get_ocr():
             det_model_dir=str(MODELS_DIR / "det"),
             rec_model_dir=str(MODELS_DIR / "rec"),
             cls_model_dir=str(MODELS_DIR / "cls"),
-            # 降低检测阈值，让更多文字被识别
+            # 降低检测阈值，识别更多文字
             det_db_thresh=0.2,       # 默认0.3，降低可检测更多
-            det_db_box_thresh=0.4,   # 默认0.5，降低可保留更多框
+            det_db_box_thresh=0.3,   # 默认0.5，降低可保留更多框
             det_db_unclip_ratio=1.8, # 默认1.6，增大可合并相邻文字
         )
         print("PaddleOCR 加载完成!")
@@ -185,14 +185,24 @@ def som():
     生成 SoM 标注图
     
     参数:
+      - mode: str - 识别模式: 'mixed'(混合), 'ocr'(仅OCR), 'opencv'(仅轮廓)
       - detect_contours: bool (默认 true) - 是否检测 UI 轮廓
       - return_image: bool (默认 true) - 是否返回标注图
+      - ocr_only: bool (默认 false) - 仅 OCR，不检测轮廓（快速模式）
+      - skip_ocr: bool (默认 false) - 跳过 OCR，仅检测轮廓
+      
+    OCR 参数:
+      - det_db_thresh: float (默认 0.3) - 二值化阈值，调小可检测更多文字
+      - det_db_box_thresh: float (默认 0.5) - 框置信度阈值，调小保留更多框
+      - det_db_unclip_ratio: float (默认 1.6) - 文字框扩展比例，调大扩展边界
+      - min_text_size: int (默认 3) - 最小文字尺寸（像素）
+      
+    OpenCV 轮廓参数:
       - min_area: int (默认 200) - 轮廓最小面积
       - max_area: int (默认 80000) - 轮廓最大面积
       - min_size: int (默认 16) - 轮廓最小尺寸
       - fill_ratio: float (默认 0.3) - 轮廓填充率阈值
       - saturation_threshold: int (默认 40) - 彩色图标饱和度阈值
-      - ocr_only: bool (默认 false) - 仅 OCR，不检测轮廓（快速模式）
     """
     try:
         image_path = get_image_from_request(request)
@@ -201,6 +211,7 @@ def som():
         
         # 获取选项（兼容 multipart form 和 json）
         options = {
+            'mode': 'mixed',
             'detect_contours': True,
             'return_image': True,
             'min_area': 200,
@@ -209,6 +220,12 @@ def som():
             'fill_ratio': 0.3,
             'saturation_threshold': 40,
             'ocr_only': False,
+            'skip_ocr': False,
+            # OCR 检测参数
+            'det_db_thresh': None,      # 二值化阈值 (默认 0.3)
+            'det_db_box_thresh': None,  # 框置信度阈值 (默认 0.5)
+            'det_db_unclip_ratio': None, # 文字框扩展比例 (默认 1.6)
+            'min_text_size': None,      # 最小文字尺寸 (默认 3)
         }
         
         if request.is_json:
@@ -216,6 +233,20 @@ def som():
             for key in options:
                 if key in data:
                     options[key] = data[key]
+        
+        # 根据模式设置参数
+        if options['mode'] == 'ocr':
+            options['ocr_only'] = True
+            options['detect_contours'] = False
+            options['skip_ocr'] = False
+        elif options['mode'] == 'opencv':
+            options['ocr_only'] = False
+            options['detect_contours'] = True
+            options['skip_ocr'] = True
+        elif options['mode'] == 'mixed':
+            options['ocr_only'] = False
+            options['detect_contours'] = True
+            options['skip_ocr'] = False
         
         # ocr_only 模式下禁用轮廓检测
         if options['ocr_only']:
@@ -225,32 +256,83 @@ def som():
         import time
         start_time = time.time()
         print(f"\n[请求] /som - 开始处理图片...")
-        print(f"  参数: ocr_only={options['ocr_only']}, detect_contours={options['detect_contours']}")
-        if options['detect_contours']:
-            print(f"  轮廓: min_area={options['min_area']}, max_area={options['max_area']}, min_size={options['min_size']}")
         
-        ocr_instance = get_ocr()
-        result = ocr_instance.ocr(str(image_path), cls=True)
+        # 打印模式信息
+        mode_str = options['mode'].upper()
+        if options['mode'] == 'mixed':
+            mode_desc = 'OCR + OpenCV 混合'
+        elif options['mode'] == 'ocr':
+            mode_desc = '仅 OCR 文字识别'
+        elif options['mode'] == 'opencv':
+            mode_desc = '仅 OpenCV 轮廓检测'
+        else:
+            mode_desc = '未知模式'
+        print(f"  模式: {mode_str} ({mode_desc})")
+        
+        # 打印详细参数
+        if not options['skip_ocr']:
+            print(f"  OCR: 启用 (det_db_thresh={options.get('det_db_thresh', '默认')})")
+        else:
+            print(f"  OCR: 跳过")
+        if options['detect_contours']:
+            print(f"  轮廓: min_area={options['min_area']}, max_area={options['max_area']}, min_size={options['min_size']}, fill_ratio={options['fill_ratio']}")
+        else:
+            print(f"  轮廓: 禁用")
         
         elements = []
-        if result and result[0]:
-            for i, line in enumerate(result[0]):
-                box = line[0]
-                text = line[1][0]
-                confidence = line[1][1]
+        
+        # OCR 识别（除非 skip_ocr 为 True）
+        if not options['skip_ocr']:
+            ocr_instance = get_ocr()
+            
+            # 动态修改检测阈值 - 直接修改后处理器的参数
+            if hasattr(ocr_instance, 'text_detector') and hasattr(ocr_instance.text_detector, 'postprocess_op'):
+                postprocess_op = ocr_instance.text_detector.postprocess_op
                 
-                x_coords = [p[0] for p in box]
-                y_coords = [p[1] for p in box]
-                x1, y1 = min(x_coords), min(y_coords)
-                x2, y2 = max(x_coords), max(y_coords)
+                # 修改 thresh (二值化阈值)
+                if options.get('det_db_thresh') is not None and hasattr(postprocess_op, 'thresh'):
+                    old_thresh = postprocess_op.thresh
+                    postprocess_op.thresh = options['det_db_thresh']
+                    print(f"  修改 thresh: {old_thresh} -> {options['det_db_thresh']}")
                 
-                elements.append({
-                    "id": i,
-                    "type": "text",
-                    "text": text,
-                    "confidence": round(float(confidence), 4),
-                    "box": [int(x1), int(y1), int(x2), int(y2)],
-                })
+                # 修改 box_thresh (框置信度阈值)
+                if options.get('det_db_box_thresh') is not None and hasattr(postprocess_op, 'box_thresh'):
+                    old_box_thresh = postprocess_op.box_thresh
+                    postprocess_op.box_thresh = options['det_db_box_thresh']
+                    print(f"  修改 box_thresh: {old_box_thresh} -> {options['det_db_box_thresh']}")
+                
+                # 修改 unclip_ratio (文字框扩展比例)
+                if options.get('det_db_unclip_ratio') is not None and hasattr(postprocess_op, 'unclip_ratio'):
+                    old_unclip = postprocess_op.unclip_ratio
+                    postprocess_op.unclip_ratio = options['det_db_unclip_ratio']
+                    print(f"  修改 unclip_ratio: {old_unclip} -> {options['det_db_unclip_ratio']}")
+                
+                # 修改 min_size (最小文字尺寸)
+                if options.get('min_text_size') is not None and hasattr(postprocess_op, 'min_size'):
+                    old_min_size = postprocess_op.min_size
+                    postprocess_op.min_size = options['min_text_size']
+                    print(f"  修改 min_size: {old_min_size} -> {options['min_text_size']}")
+            
+            result = ocr_instance.ocr(str(image_path), cls=True)
+            
+            if result and result[0]:
+                for i, line in enumerate(result[0]):
+                    box = line[0]
+                    text = line[1][0]
+                    confidence = line[1][1]
+                    
+                    x_coords = [p[0] for p in box]
+                    y_coords = [p[1] for p in box]
+                    x1, y1 = min(x_coords), min(y_coords)
+                    x2, y2 = max(x_coords), max(y_coords)
+                    
+                    elements.append({
+                        "id": i,
+                        "type": "text",
+                        "text": text,
+                        "confidence": round(float(confidence), 4),
+                        "box": [int(x1), int(y1), int(x2), int(y2)],
+                    })
         
         # 检测 UI 轮廓
         if options['detect_contours']:
@@ -287,7 +369,7 @@ def som():
         
         elapsed = time.time() - start_time
         text_count = sum(1 for el in elements if el.get('type') == 'text')
-        ui_count = sum(1 for el in elements if el.get('type') == 'ui')
+        ui_count = sum(1 for el in elements if el.get('type') == 'ui' or el.get('type') == 'contour')
         print(f"  完成! 耗时 {elapsed:.2f}s, 识别 {text_count} 个文字, {ui_count} 个UI元素")
         
         return jsonify(response)
